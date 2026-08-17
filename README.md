@@ -1,4 +1,4 @@
-# OpenAPI Tools
+# OpenAPI Converter
 
 Convert OpenAPI and Swagger files, or move supported description markers into
 OpenAPI fields, directly in VS Code.
@@ -71,14 +71,14 @@ supported. The [security policy](SECURITY.md) describes the full scope.
 
 ## Installation
 
-Install **OpenAPI Tools** from the Visual Studio Code Marketplace, or download a
+Install **OpenAPI Converter** from the Visual Studio Code Marketplace, or download a
 `.vsix` file from the
-[GitHub releases page](https://github.com/Beata-Humeniuk/openapi-tools/releases)
+[GitHub releases page](https://github.com/Beata-Humeniuk/openapi-converter/releases)
 and run **Extensions: Install from VSIX**.
 
 ## Support
 
-Report bugs in [GitHub Issues](https://github.com/Beata-Humeniuk/openapi-tools/issues).
+Report bugs in [GitHub Issues](https://github.com/Beata-Humeniuk/openapi-converter/issues).
 For security issues, and for what must not go into a report, read the
 [security policy](SECURITY.md).
 

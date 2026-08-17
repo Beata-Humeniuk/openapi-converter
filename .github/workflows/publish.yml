@@ -40,7 +40,7 @@ jobs:
 
           version=$(node -p "require('./package.json').version")
           tag="v${version}"
-          vsix="openapi-tools-${version}.vsix"
+          vsix="openapi-converter-${version}.vsix"
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -85,13 +85,13 @@ jobs:
           node <<'NODE'
           const manifest = require('/tmp/extension-package.json');
           const expected = {
-            name: 'openapi-tools',
-            displayName: 'OpenAPI Tools',
+            name: 'openapi-converter',
+            displayName: 'OpenAPI Converter',
             publisher: 'beatahumeniuk',
             version: process.env.EXPECTED_VERSION,
             repository: {
               type: 'git',
-              url: 'https://github.com/Beata-Humeniuk/openapi-tools.git',
+              url: 'https://github.com/Beata-Humeniuk/openapi-converter.git',
             },
           };
           for (const [key, value] of Object.entries(expected)) {

@@ -5,9 +5,9 @@ const { detectVersion, detectExactVersion, convertSpec, canonicalOrder, OPENAPI_
 const { applyMarkers, liftDescriptionTags } = require('./exampleFill');
 
 function versionTag() {
-  const ext = vscode.extensions.getExtension('beatahumeniuk.openapi-tools');
+  const ext = vscode.extensions.getExtension('beatahumeniuk.openapi-converter');
   const version = ext && ext.packageJSON && ext.packageJSON.version;
-  return version ? 'OpenAPI Tools ' + version + ' · ' : '';
+  return version ? 'OpenAPI Converter ' + version + ' · ' : '';
 }
 
 function parseSpec(text) {
@@ -247,8 +247,8 @@ async function convertCommand(uri) {
 
 function activate(context) {
   context.subscriptions.push(
-    vscode.commands.registerCommand('openapiTools.convert', convertCommand),
-    vscode.commands.registerCommand('openapiTools.applyMarkers', applyMarkersCommand)
+    vscode.commands.registerCommand('openapiConverter.convert', convertCommand),
+    vscode.commands.registerCommand('openapiConverter.applyMarkers', applyMarkersCommand)
   );
 }
 

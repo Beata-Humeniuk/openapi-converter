@@ -1,0 +1,554 @@
+{
+  "spec": {
+    "swagger": "2.0",
+    "info": {
+      "title": "Markers in descriptions — demo file",
+      "description": "A contract in the shape it leaves the EA generator in: everything the generator cannot express sits in the descriptions as [field: value] markers. Text values — texts, dates, identifiers, enum values — are written in quotes, just like in JSON; numbers, flags and booleans without. Run the \"OpenAPI: Apply Markers\" command and compare it with the README. Once the file is saved the markers are gone from the descriptions — `npm run demo:reset` brings back a copy to play with again.",
+      "version": "1.0.0"
+    },
+    "basePath": "/api/v1",
+    "paths": {
+      "/stations": {
+        "post": {
+          "summary": "Register a station",
+          "description": "Registers a new measurement station. Markers are read from BOTH fields: consumes/produces sit higher up in summary, the rest here. [TODO: write down the daily reading limits]",
+          "parameters": [
+            {
+              "name": "channel",
+              "in": "query",
+              "type": "string",
+              "description": "The channel the request came in through.",
+              "default": "WEB",
+              "x-example": "WEB",
+              "enum": [
+                "WEB",
+                "MOBILE",
+                "API"
+              ]
+            },
+            {
+              "name": "limit",
+              "in": "query",
+              "type": "integer",
+              "description": "How many items to return — numbers without quotes.",
+              "default": 20,
+              "multipleOf": 5,
+              "maximum": 100,
+              "minimum": 1
+            },
+            {
+              "name": "methods",
+              "in": "query",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Alert channels — a list on an array parameter.",
+              "maxItems": 5,
+              "minItems": 1,
+              "uniqueItems": true,
+              "x-example": [
+                "SMS",
+                "MAIL"
+              ]
+            },
+            {
+              "name": "X-Correlation-Id",
+              "in": "header",
+              "type": "string",
+              "description": "Correlation identifier.",
+              "x-source": "EA",
+              "format": "uuid"
+            },
+            {
+              "name": "note",
+              "in": "query",
+              "type": "string",
+              "description": "A free-form operator note — nothing here hints at the content, so an example should NOT show up."
+            },
+            {
+              "name": "body",
+              "in": "body",
+              "required": true,
+              "schema": {
+                "$ref": "#/definitions/Station"
+              }
+            }
+          ],
+          "responses": {
+            "201": {
+              "description": "Created",
+              "schema": {
+                "$ref": "#/definitions/Station"
+              }
+            },
+            "400": {
+              "description": "Validation error",
+              "schema": {
+                "$ref": "#/definitions/Error"
+              }
+            }
+          },
+          "produces": [
+            "application/json"
+          ],
+          "consumes": [
+            "application/json",
+            "application/xml"
+          ],
+          "x-audit": {
+            "level": "high"
+          },
+          "tags": [
+            "Stations",
+            "Sensors"
+          ],
+          "operationId": "createStation"
+        }
+      },
+      "/stations/{id}/legacy": {
+        "get": {
+          "description": "The old way of reading a station. A summary made up of nothing but a marker has to disappear, not stay as an empty string.",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "type": "string",
+              "description": "Station identifier.",
+              "format": "uuid"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "OK",
+              "schema": {
+                "$ref": "#/definitions/Station"
+              }
+            }
+          },
+          "produces": [
+            "application/xml"
+          ],
+          "deprecated": true,
+          "tags": [
+            "Stations"
+          ],
+          "summary": "Read a station (retiring version)",
+          "operationId": "getStationLegacy"
+        }
+      }
+    },
+    "definitions": {
+      "Station": {
+        "type": "object",
+        "description": "A measurement station.",
+        "required": [
+          "serial"
+        ],
+        "properties": {
+          "serial": {
+            "type": "string",
+            "description": "Serial number given by the system.",
+            "readOnly": true,
+            "pattern": "^ST/\\d{4}/\\d{6}$",
+            "example": "ST/2026/000123",
+            "title": "Station serial"
+          },
+          "region": {
+            "type": "string",
+            "description": "Region — a pattern on its own gives no example; without a marker the field stays empty.",
+            "pattern": "^\\d{3}$"
+          },
+          "status": {
+            "type": "string",
+            "description": "Station status — enum and default set from markers; we do NOT make up an example.",
+            "default": "ACTIVE",
+            "enum": [
+              "ACTIVE",
+              "MAINTENANCE",
+              "RETIRED"
+            ]
+          },
+          "stationId": {
+            "type": "string",
+            "description": "Technical identifier — a uid in quotes.",
+            "example": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+            "format": "uuid"
+          },
+          "installedOn": {
+            "type": "string",
+            "description": "Installation date — a date in quotes.",
+            "example": "2026-03-01",
+            "format": "date"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When the record was created — a format on its own gives no example.",
+            "format": "date-time"
+          },
+          "mastHeight": {
+            "type": "number",
+            "description": "Mast height in metres — numbers without quotes, with a decimal point, exactly as in the file.",
+            "multipleOf": 0.5,
+            "maximum": 100,
+            "minimum": 0.5
+          },
+          "antennas": {
+            "type": "integer",
+            "description": "Number of antennas — in Swagger 2.0 exclusiveMinimum is a boolean and has to carry an explicit value (a bare [exclusiveMinimum] with no value stays in the description).",
+            "maximum": 4,
+            "exclusiveMinimum": true,
+            "minimum": 0
+          },
+          "code": {
+            "type": "string",
+            "description": "Internal code — the quotes leave the leading zero alone.",
+            "maxLength": 4,
+            "minLength": 4,
+            "example": "0012"
+          },
+          "failedReadingAlertMethods": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Available ways of announcing failed readings"
+            },
+            "description": "A 0..* attribute — EA sticks the note on the ELEMENT TYPE, and the list still has to land on the array.",
+            "example": [
+              "SMS",
+              "MAIL"
+            ]
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The same list, but with the note written on the array.",
+            "uniqueItems": true,
+            "minItems": 1,
+            "example": [
+              "WEB",
+              "MOBILE"
+            ]
+          },
+          "singleChannel": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "A single value written on the array — the result has to be a one-element list.",
+            "example": [
+              "SMS"
+            ]
+          },
+          "elementExample": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "An example of a SINGLE value stays on the element.",
+              "example": "SMS"
+            }
+          },
+          "sampleValues": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "description": "A list of numbers from the element note — numbers without quotes."
+            },
+            "example": [
+              10,
+              20,
+              30
+            ]
+          },
+          "codes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Code",
+              "description": "The element is a shared type — the list lands on the array and the type itself is left untouched."
+            },
+            "example": [
+              "AB",
+              "CD"
+            ]
+          },
+          "matrix": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "description": "A list of lists — here the array of values belongs to the element, because the element IS itself an array.",
+              "example": [
+                1,
+                2
+              ]
+            }
+          },
+          "patternedList": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "The list goes to the array, while the pattern describes the element and stays on it (the element has no example of its own).",
+              "pattern": "^[A-Z]{2}$"
+            },
+            "example": [
+              "AB"
+            ]
+          },
+          "emptyList": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "An explicitly empty list.",
+            "example": []
+          },
+          "unknownValue": {
+            "type": "string",
+            "description": "An explicit absence of a value — null WITHOUT quotes, because it is not a text.",
+            "example": null
+          },
+          "literalNull": {
+            "type": "string",
+            "description": "A literal four-letter text — in quotes, so it is an ordinary string.",
+            "example": "null"
+          },
+          "quotedSpecialChars": {
+            "type": "string",
+            "description": "Quotes protect the square bracket, the comma and the spaces at the edges of the value.",
+            "example": "a]b, c"
+          },
+          "quotedList": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "A comma inside quotes belongs to the value, it does not split the list."
+            },
+            "example": [
+              "A,B",
+              "C"
+            ]
+          },
+          "unquotedStillWorks": {
+            "type": "string",
+            "description": "Quotes are not required — it works without them too, you just cannot see where the value ends.",
+            "example": "no remarks"
+          },
+          "oldField": {
+            "type": "string",
+            "description": "A field being retired.",
+            "x-legacy-name": "stationRegion",
+            "example": "X",
+            "x-deprecated": true
+          },
+          "optionalRemark": {
+            "type": "string",
+            "description": "A field that may arrive empty.",
+            "example": "no remarks",
+            "x-nullable": true
+          },
+          "secret": {
+            "type": "string",
+            "description": "Write only. [writeOnly]",
+            "example": "hidden"
+          },
+          "unsupportedPattern": {
+            "type": "string",
+            "description": "A pattern that cannot be reversed easily — we generate nothing from it anyway.",
+            "pattern": "^(?!bad)ok$"
+          },
+          "altitude": {
+            "type": "number",
+            "description": "Altitude above sea level — a pattern applies ONLY to strings, so on a numeric field the marker stays in the description instead of soaking into the file as a dead entry. [pattern: \"^\\d+\\.\\d{2}$\"]",
+            "example": 1250
+          },
+          "altitudeAsText": {
+            "type": "string",
+            "description": "The same altitude modelled as a text — only here does the pattern make sense, and the quotes keep the trailing zeros.",
+            "example": "1250.00",
+            "pattern": "^\\d+\\.\\d{2}$"
+          },
+          "quotedOnNumber": {
+            "type": "number",
+            "description": "Quotes on a numeric field do not match the type — the marker stays in the description instead of putting a text where the contract promises a number. [example: \"1250.00\"]"
+          },
+          "commaDecimal": {
+            "type": "number",
+            "description": "A decimal comma is not how numbers are written in this file — the marker stays in the description. [example: 0,5]"
+          },
+          "boolWord": {
+            "type": "boolean",
+            "description": "On a boolean field only true/false fits — a word in any language stays in the description. [example: yes]"
+          },
+          "flagTypo": {
+            "type": "string",
+            "description": "A typo in a flag value does not switch it on quietly. [readOnly: fasle]"
+          },
+          "doubledBackslashes": {
+            "type": "string",
+            "description": "WITHOUT quotes the content is taken literally, so \\\\d means \"a backslash, then the letter d\" and matches nothing — the field ends up on the \"example does not match the pattern\" list.",
+            "example": "12345",
+            "pattern": "^\\\\d+$"
+          },
+          "quotedBackslashes": {
+            "type": "string",
+            "description": "The same text IN QUOTES reads like it would in JSON: \\\\d is one backslash and the letter d, that is a valid pattern for digits.",
+            "example": "12345",
+            "pattern": "^\\d+$"
+          },
+          "misplacedConstraint": {
+            "type": "string",
+            "description": "A numeric constraint on a text — that stays in the description too. [minimum: 1]"
+          },
+          "freeText": {
+            "type": "string",
+            "description": "A text with no marker — it is left without an example."
+          },
+          "boundedText": {
+            "type": "string",
+            "description": "Length limits from markers; no example.",
+            "maxLength": 10,
+            "minLength": 5
+          },
+          "counter": {
+            "type": "integer",
+            "description": "A number with no marker — no example."
+          },
+          "heatedEnclosure": {
+            "type": "boolean",
+            "description": "A boolean with no marker — no example."
+          },
+          "autoCalibration": {
+            "type": "boolean",
+            "description": "A boolean with a default value — true/false, without quotes.",
+            "default": false
+          },
+          "notTouched": {
+            "type": "string",
+            "description": "Markers outside the dictionary stay in the description where a human can see them: [0..1] [TODO: agree with the data team] [frmat: uuid] — a typo in the key is not guessed at."
+          },
+          "sharedType": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/Code"
+              }
+            ],
+            "description": "A type from the shared model that must not be touched — the note sits ONE LEVEL UP, on the field. A value next to a bare $ref would be ignored in both 2.0 and 3.0, so the field gets wrapped in a one-element allOf.",
+            "example": "AB"
+          },
+          "sharedTypeNoMarker": {
+            "$ref": "#/definitions/Code",
+            "description": "The same field without a marker of its own — it stays a bare reference and shows the shared type's example."
+          },
+          "spreadOperator": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/Operator"
+              }
+            ],
+            "description": "[exampleBody:] spreads a ready-made piece of the payload ACROSS THE FIELDS — every field gets its own example, instead of one big example on top.",
+            "example": {
+              "firstName": "Alex",
+              "lastName": "Meyer",
+              "unit": "hPa"
+            }
+          },
+          "operator": {
+            "$ref": "#/definitions/Operator"
+          },
+          "address": {
+            "$ref": "#/definitions/Address"
+          }
+        },
+        "maxProperties": 40,
+        "minProperties": 1
+      },
+      "Operator": {
+        "type": "object",
+        "description": "Operator details — no markers, so no examples: what to show is up to Swagger UI.",
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "example": "Alex"
+          },
+          "lastName": {
+            "type": "string",
+            "example": "Meyer"
+          },
+          "email": {
+            "type": "string",
+            "description": "E-mail address — format and pattern from markers, no example.",
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$",
+            "format": "email"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "contactId": {
+            "type": "string"
+          },
+          "registryNumber": {
+            "type": "string"
+          },
+          "referenceNumber": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string",
+            "example": "hPa"
+          }
+        }
+      },
+      "Address": {
+        "type": "object",
+        "properties": {
+          "street": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "Postal code — the pattern alone, no example.",
+            "pattern": "^\\d{2}-\\d{3}$"
+          },
+          "country": {
+            "type": "string"
+          }
+        }
+      },
+      "Code": {
+        "type": "string",
+        "description": "A shared type from the common model. Its example (from a marker) applies everywhere a field has none of its own.",
+        "example": "ZZ"
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Error code.",
+            "enum": [
+              "VALIDATION",
+              "CONFLICT",
+              "INTERNAL"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "A message for the caller — a comma and a full stop inside the value are safe in quotes.",
+            "example": "The station serial does not match the pattern, correct the data."
+          }
+        }
+      }
+    }
+  },
+  "mismatched": [
+    "Station.doubledBackslashes"
+  ]
+}

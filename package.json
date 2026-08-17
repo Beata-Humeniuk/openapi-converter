@@ -1,8 +1,8 @@
 {
-  "name": "openapi-tools",
-  "displayName": "OpenAPI Tools",
+  "name": "openapi-converter",
+  "displayName": "OpenAPI Converter",
   "description": "Convert OpenAPI/Swagger contracts between versions (2.0, 3.0, 3.1, 3.2) with a warning report, and apply [field: value] markers from descriptions into real OpenAPI fields. It invents nothing — only what is in the model lands in the file. Fully local: no network, no telemetry.",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "publisher": "beatahumeniuk",
   "license": "MIT",
   "author": {
@@ -10,11 +10,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Beata-Humeniuk/openapi-tools.git"
+    "url": "https://github.com/Beata-Humeniuk/openapi-converter.git"
   },
-  "homepage": "https://github.com/Beata-Humeniuk/openapi-tools#readme",
+  "homepage": "https://github.com/Beata-Humeniuk/openapi-converter#readme",
   "bugs": {
-    "url": "https://github.com/Beata-Humeniuk/openapi-tools/issues"
+    "url": "https://github.com/Beata-Humeniuk/openapi-converter/issues"
   },
   "icon": "images/icon.png",
   "engines": {
@@ -44,12 +44,12 @@
   "contributes": {
     "commands": [
       {
-        "command": "openapiTools.convert",
+        "command": "openapiConverter.convert",
         "title": "Convert Version",
         "category": "OpenAPI"
       },
       {
-        "command": "openapiTools.applyMarkers",
+        "command": "openapiConverter.applyMarkers",
         "title": "Apply Markers",
         "category": "OpenAPI"
       }
@@ -57,24 +57,24 @@
     "menus": {
       "editor/context": [
         {
-          "command": "openapiTools.convert",
+          "command": "openapiConverter.convert",
           "when": "resourceLangId == json || resourceLangId == jsonc || resourceLangId == yaml",
           "group": "1_modification"
         },
         {
-          "command": "openapiTools.applyMarkers",
+          "command": "openapiConverter.applyMarkers",
           "when": "resourceLangId == json || resourceLangId == jsonc || resourceLangId == yaml",
           "group": "1_modification"
         }
       ],
       "explorer/context": [
         {
-          "command": "openapiTools.convert",
+          "command": "openapiConverter.convert",
           "when": "resourceExtname == .json || resourceExtname == .yaml || resourceExtname == .yml",
           "group": "7_modification"
         },
         {
-          "command": "openapiTools.applyMarkers",
+          "command": "openapiConverter.applyMarkers",
           "when": "resourceExtname == .json || resourceExtname == .yaml || resourceExtname == .yml",
           "group": "7_modification"
         }

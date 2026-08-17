@@ -1,0 +1,555 @@
+{
+  "spec": {
+    "swagger": "2.0",
+    "info": {
+      "title": "Znaczniki w opisach — plik demonstracyjny",
+      "description": "Kontrakt w takiej postaci, w jakiej wychodzi z generatora EA: wszystko, czego generator nie umie wyrazić, siedzi w opisach jako znaczniki [pole: wartość]. Wartości tekstowe — teksty, daty, identyfikatory, wartości enumów — pisane są w cudzysłowie, tak jak w JSON-ie; liczby, flagi i wartości logiczne bez. Uruchom komendę \"OpenAPI: Zastosowanie znaczników\" i porównaj z README. Po zapisaniu pliku znaczniki znikają z opisów — kopię do ponownej zabawy przywraca `npm run demo:reset`.",
+      "version": "1.0.0"
+    },
+    "basePath": "/api/v1",
+    "paths": {
+      "/agreements": {
+        "post": {
+          "summary": "Założenie umowy",
+          "description": "Zakłada nową umowę. Znaczniki czytane są z OBU pól: consumes/produces siedzą wyżej w summary, reszta tutaj. [TODO: dopisać limity dziennych zleceń]",
+          "parameters": [
+            {
+              "name": "channel",
+              "in": "query",
+              "type": "string",
+              "description": "Kanał, z którego przyszło zgłoszenie.",
+              "default": "WWW",
+              "x-example": "WWW",
+              "enum": [
+                "WWW",
+                "MOBILE",
+                "IVR"
+              ]
+            },
+            {
+              "name": "limit",
+              "in": "query",
+              "type": "integer",
+              "description": "Ile pozycji zwrócić — liczby bez cudzysłowu.",
+              "default": 20,
+              "multipleOf": 5,
+              "maximum": 100,
+              "minimum": 1
+            },
+            {
+              "name": "methods",
+              "in": "query",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Kanały powiadomień — lista na parametrze tablicowym.",
+              "maxItems": 5,
+              "minItems": 1,
+              "uniqueItems": true,
+              "x-example": [
+                "RQST",
+                "MAIL"
+              ]
+            },
+            {
+              "name": "X-Correlation-Id",
+              "in": "header",
+              "type": "string",
+              "description": "Identyfikator korelacji.",
+              "x-source": "EA",
+              "format": "uuid"
+            },
+            {
+              "name": "note",
+              "in": "query",
+              "type": "string",
+              "description": "Dowolna notatka operatora — nic tu nie sugeruje treści, więc przykład NIE powinien się pojawić."
+            },
+            {
+              "name": "body",
+              "in": "body",
+              "required": true,
+              "schema": {
+                "$ref": "#/definitions/Agreement"
+              }
+            }
+          ],
+          "responses": {
+            "201": {
+              "description": "Utworzono",
+              "schema": {
+                "$ref": "#/definitions/Agreement"
+              }
+            },
+            "400": {
+              "description": "Błąd walidacji",
+              "schema": {
+                "$ref": "#/definitions/Error"
+              }
+            }
+          },
+          "produces": [
+            "application/json"
+          ],
+          "consumes": [
+            "application/json",
+            "application/xml"
+          ],
+          "x-audit": {
+            "level": "high"
+          },
+          "tags": [
+            "Umowy",
+            "Płatności"
+          ],
+          "operationId": "createAgreement"
+        }
+      },
+      "/agreements/{id}/legacy": {
+        "get": {
+          "description": "Stary odczyt umowy. Summary złożone wyłącznie ze znacznika ma zniknąć, a nie zostać pustym napisem.",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "type": "string",
+              "description": "Identyfikator umowy.",
+              "format": "uuid"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "OK",
+              "schema": {
+                "$ref": "#/definitions/Agreement"
+              }
+            }
+          },
+          "produces": [
+            "application/xml"
+          ],
+          "deprecated": true,
+          "tags": [
+            "Umowy"
+          ],
+          "summary": "Odczyt umowy (wersja wycofywana)",
+          "operationId": "getAgreementLegacy"
+        }
+      }
+    },
+    "definitions": {
+      "Agreement": {
+        "type": "object",
+        "description": "Umowa.",
+        "required": [
+          "number"
+        ],
+        "properties": {
+          "number": {
+            "type": "string",
+            "description": "Numer umowy nadany przez system.",
+            "readOnly": true,
+            "pattern": "^UM/\\d{4}/\\d{6}$",
+            "example": "UM/2026/000123",
+            "title": "Numer umowy"
+          },
+          "portfolio": {
+            "type": "string",
+            "description": "Portfel — sam wzorzec nie daje przykładu; bez znacznika pole zostaje puste.",
+            "pattern": "^\\d{3}$"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status umowy — enum i default ustawione ze znaczników; przykładu NIE dorabiamy.",
+            "default": "ACTIVE",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED",
+              "CLOSED"
+            ]
+          },
+          "agreementId": {
+            "type": "string",
+            "description": "Identyfikator techniczny — uid w cudzysłowie.",
+            "example": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+            "format": "uuid"
+          },
+          "startDate": {
+            "type": "string",
+            "description": "Data zawarcia — data w cudzysłowie.",
+            "example": "2026-03-01",
+            "format": "date"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Data i godzina założenia — sam format nie daje przykładu.",
+            "format": "date-time"
+          },
+          "fee": {
+            "type": "number",
+            "description": "Opłata miesięczna — liczby bez cudzysłowu, z kropką dziesiętną, tak jak w pliku.",
+            "multipleOf": 0.5,
+            "maximum": 100,
+            "minimum": 0.5
+          },
+          "signatures": {
+            "type": "integer",
+            "description": "Liczba podpisów — w Swaggerze 2.0 exclusiveMinimum jest boolowskie i musi mieć jawną wartość (sam [exclusiveMinimum] bez wartości zostanie w opisie).",
+            "maximum": 4,
+            "exclusiveMinimum": true,
+            "minimum": 0
+          },
+          "code": {
+            "type": "string",
+            "description": "Kod wewnętrzny — cudzysłów zostawia zero wiodące w spokoju.",
+            "maxLength": 4,
+            "minLength": 4,
+            "example": "0012"
+          },
+          "rejectedPaymentsNotificationMethods": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Dostępne sposoby powiadomienia o transakcjach odrzuconych"
+            },
+            "description": "Atrybut 0..* — EA dokleja notatkę do TYPU ELEMENTU, a lista i tak ma trafić na tablicę.",
+            "example": [
+              "RQST",
+              "MAIL"
+            ]
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ta sama lista, ale notatka napisana na tablicy.",
+            "uniqueItems": true,
+            "minItems": 1,
+            "example": [
+              "WWW",
+              "MOBILE"
+            ]
+          },
+          "singleChannel": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Pojedyncza wartość napisana na tablicy — ma wyjść lista jednoelementowa.",
+            "example": [
+              "RQST"
+            ]
+          },
+          "elementExample": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Przykład POJEDYNCZEJ wartości zostaje na elemencie.",
+              "example": "RQST"
+            }
+          },
+          "amounts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "description": "Lista liczb z notatki elementu — liczby bez cudzysłowu."
+            },
+            "example": [
+              10,
+              20,
+              30
+            ]
+          },
+          "codes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Code",
+              "description": "Element jest współdzielonym typem — lista ląduje na tablicy, a sam typ zostaje nietknięty."
+            },
+            "example": [
+              "AB",
+              "CD"
+            ]
+          },
+          "matrix": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "description": "Lista list — tu tablica wartości należy do elementu, bo element SAM jest tablicą.",
+              "example": [
+                1,
+                2
+              ]
+            }
+          },
+          "patternedList": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Lista idzie na tablicę, a wzorzec opisuje element i na nim zostaje (element bez własnego przykładu).",
+              "pattern": "^[A-Z]{2}$"
+            },
+            "example": [
+              "AB"
+            ]
+          },
+          "emptyList": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Jawnie pusta lista.",
+            "example": []
+          },
+          "unknownValue": {
+            "type": "string",
+            "description": "Jawny brak wartości — null BEZ cudzysłowu, bo to nie jest tekst.",
+            "example": null
+          },
+          "literalNull": {
+            "type": "string",
+            "description": "Dosłowny czteroliterowy tekst — w cudzysłowie, więc to zwykły string.",
+            "example": "null"
+          },
+          "quotedSpecialChars": {
+            "type": "string",
+            "description": "Cudzysłów chroni nawias kwadratowy, przecinek i spacje na brzegach wartości.",
+            "example": "a]b, c"
+          },
+          "quotedList": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Przecinek w cudzysłowie należy do wartości, nie dzieli listy."
+            },
+            "example": [
+              "A,B",
+              "C"
+            ]
+          },
+          "unquotedStillWorks": {
+            "type": "string",
+            "description": "Cudzysłów nie jest wymagany — bez niego też działa, tylko nie widać granic wartości.",
+            "example": "brak uwag"
+          },
+          "oldField": {
+            "type": "string",
+            "description": "Pole wycofywane.",
+            "x-legacy-name": "agreementPortfolio",
+            "example": "X",
+            "deprecated": true
+          },
+          "optionalRemark": {
+            "type": "string",
+            "description": "Pole, które może przyjść puste.",
+            "example": "brak uwag",
+            "x-nullable": true
+          },
+          "secret": {
+            "type": "string",
+            "description": "Tylko do zapisu.",
+            "example": "tajne",
+            "writeOnly": true
+          },
+          "unsupportedPattern": {
+            "type": "string",
+            "description": "Wzorzec, którego nie da się prosto odwrócić — i tak nic z niego nie generujemy.",
+            "pattern": "^(?!bad)ok$"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Kwota limitu — wzorzec dotyczy WYŁĄCZNIE stringów, więc na polu liczbowym znacznik zostanie w opisie zamiast wsiąknąć w plik jako martwy zapis. [pattern: \"^\\d+\\.\\d{2}$\"]",
+            "example": 5000
+          },
+          "amountAsText": {
+            "type": "string",
+            "description": "Ta sama kwota zamodelowana jako tekst — dopiero tu wzorzec ma sens, a cudzysłów zachowuje końcowe zera.",
+            "example": "5000.00",
+            "pattern": "^\\d+\\.\\d{2}$"
+          },
+          "quotedOnNumber": {
+            "type": "number",
+            "description": "Cudzysłów na polu liczbowym nie pasuje do typu — znacznik zostaje w opisie zamiast wstawić tekst tam, gdzie kontrakt obiecuje liczbę. [example: \"5000.00\"]"
+          },
+          "commaDecimal": {
+            "type": "number",
+            "description": "Przecinek dziesiętny to nie jest zapis liczby w tym pliku — znacznik zostaje w opisie. [example: 0,5]"
+          },
+          "boolWord": {
+            "type": "boolean",
+            "description": "Na polu logicznym pasuje wyłącznie true/false — wyraz w jakimkolwiek języku zostaje w opisie. [example: tak]"
+          },
+          "flagTypo": {
+            "type": "string",
+            "description": "Literówka w wartości flagi nie włącza jej po cichu. [readOnly: fasle]"
+          },
+          "doubledBackslashes": {
+            "type": "string",
+            "description": "BEZ cudzysłowu treść jest brana dosłownie, więc \\\\d znaczy „ukośnik, potem litera d” i nie pasuje do niczego — pole trafi na listę „przykład nie pasuje do wzorca”.",
+            "example": "12345",
+            "pattern": "^\\\\d+$"
+          },
+          "quotedBackslashes": {
+            "type": "string",
+            "description": "Ten sam zapis W CUDZYSŁOWIE czyta się jak w JSON-ie: \\\\d to jeden ukośnik i litera d, czyli poprawny wzorzec na cyfry.",
+            "example": "12345",
+            "pattern": "^\\d+$"
+          },
+          "misplacedConstraint": {
+            "type": "string",
+            "description": "Ograniczenie liczbowe na tekście — też zostaje w opisie. [minimum: 1]"
+          },
+          "freeText": {
+            "type": "string",
+            "description": "Tekst bez znacznika — zostaje bez przykładu."
+          },
+          "boundedText": {
+            "type": "string",
+            "description": "Ograniczenia długości ze znaczników; przykładu brak.",
+            "maxLength": 10,
+            "minLength": 5
+          },
+          "counter": {
+            "type": "integer",
+            "description": "Liczba bez znacznika — bez przykładu."
+          },
+          "caSaverAllowed": {
+            "type": "boolean",
+            "description": "Boolean bez znacznika — bez przykładu."
+          },
+          "paperless": {
+            "type": "boolean",
+            "description": "Boolean z wartością domyślną — true/false, bez cudzysłowu.",
+            "default": false
+          },
+          "notTouched": {
+            "type": "string",
+            "description": "Znaczniki spoza słownika zostają w opisie widoczne dla człowieka: [0..1] [TODO: uzgodnić z biznesem] [frmat: uuid] — literówka w kluczu nie jest zgadywana."
+          },
+          "sharedType": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/Code"
+              }
+            ],
+            "description": "Typ ze wspólnego modelu, którego nie wolno ruszać — notatka siedzi POZIOM WYŻEJ, na polu. Wartość obok samego $ref byłaby w 2.0 i 3.0 ignorowana, więc pole zostanie opakowane w jednoelementowy allOf.",
+            "example": "AB"
+          },
+          "sharedTypeNoMarker": {
+            "$ref": "#/definitions/Code",
+            "description": "To samo pole bez własnego znacznika — zostaje gołą referencją i pokazuje przykład wspólnego typu."
+          },
+          "spreadHolder": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/Holder"
+              }
+            ],
+            "description": "[exampleBody:] rozkłada gotowy kawałek payloadu NA POLA — każde pole dostaje swój example, zamiast jednego wielkiego przykładu na wierzchu.",
+            "example": {
+              "imie": "Anna",
+              "nazwisko": "Nowak",
+              "waluta": "EUR"
+            }
+          },
+          "holder": {
+            "$ref": "#/definitions/Holder"
+          },
+          "address": {
+            "$ref": "#/definitions/Address"
+          }
+        },
+        "maxProperties": 40,
+        "minProperties": 1
+      },
+      "Holder": {
+        "type": "object",
+        "description": "Dane posiadacza — bez znaczników, więc bez przykładów: co pokazać, decyduje Swagger UI.",
+        "properties": {
+          "imie": {
+            "type": "string",
+            "example": "Anna"
+          },
+          "nazwisko": {
+            "type": "string",
+            "example": "Nowak"
+          },
+          "email": {
+            "type": "string",
+            "description": "Adres e-mail — format i wzorzec ze znaczników, bez przykładu.",
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$",
+            "format": "email"
+          },
+          "telefon": {
+            "type": "string"
+          },
+          "pesel": {
+            "type": "string"
+          },
+          "nip": {
+            "type": "string"
+          },
+          "iban": {
+            "type": "string"
+          },
+          "waluta": {
+            "type": "string",
+            "example": "EUR"
+          }
+        }
+      },
+      "Address": {
+        "type": "object",
+        "properties": {
+          "ulica": {
+            "type": "string"
+          },
+          "miasto": {
+            "type": "string"
+          },
+          "kodPocztowy": {
+            "type": "string",
+            "description": "Kod pocztowy — sam wzorzec, bez przykładu.",
+            "pattern": "^\\d{2}-\\d{3}$"
+          },
+          "kraj": {
+            "type": "string"
+          }
+        }
+      },
+      "Code": {
+        "type": "string",
+        "description": "Współdzielony typ z modelu wspólnego. Jego przykład (ze znacznika) obowiązuje wszędzie tam, gdzie pole nie ma własnego.",
+        "example": "ZZ"
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Kod błędu.",
+            "enum": [
+              "VALIDATION",
+              "CONFLICT",
+              "INTERNAL"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Komunikat dla wołającego — przecinek i kropka w środku wartości są bezpieczne w cudzysłowie.",
+            "example": "Numer umowy nie pasuje do wzorca, popraw dane."
+          }
+        }
+      }
+    }
+  },
+  "mismatched": [
+    "Agreement.doubledBackslashes"
+  ]
+}

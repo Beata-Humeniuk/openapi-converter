@@ -3,7 +3,7 @@
 This file lists user-visible changes to OpenAPI Tools. The project follows
 [Semantic Versioning](https://semver.org/).
 
-## [1.0.0] - 2026-08-17
+## [1.0.1] - 2026-08-17
 
 First public release.
 

@@ -3,6 +3,15 @@
 This file lists user-visible changes to OpenAPI Converter. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- New `[response: <code> "<description>" {...}]` operation marker. It adds a
+  response with a custom status code (including ranges such as `4XX` in
+  OpenAPI 3.x, and `default`), an optional description, and an optional JSON
+  example. Missing descriptions use the standard HTTP reason phrase.
+
 ## [1.0.0] - 2026-08-17
 
 First public release.

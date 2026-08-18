@@ -84,9 +84,84 @@ const OPERATION_TAG_FIELDS = {
   tags: 'stringList',
   consumes: 'stringList',
   produces: 'stringList',
-  deprecated: 'flag'
+  deprecated: 'flag',
+  response: 'response'
 };
 const OPERATION_FIELD_NAMES = { operationid: 'operationId' };
+
+const RESPONSE_REASONS = {
+  '1XX': 'Informational', '2XX': 'Success', '3XX': 'Redirection',
+  '4XX': 'Client error', '5XX': 'Server error', 'default': 'Default response',
+  100: 'Continue', 101: 'Switching Protocols',
+  200: 'OK', 201: 'Created', 202: 'Accepted', 204: 'No Content', 206: 'Partial Content',
+  301: 'Moved Permanently', 302: 'Found', 303: 'See Other', 304: 'Not Modified',
+  307: 'Temporary Redirect', 308: 'Permanent Redirect',
+  400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found',
+  405: 'Method Not Allowed', 406: 'Not Acceptable', 408: 'Request Timeout',
+  409: 'Conflict', 410: 'Gone', 412: 'Precondition Failed', 415: 'Unsupported Media Type',
+  422: 'Unprocessable Entity', 423: 'Locked', 429: 'Too Many Requests',
+  500: 'Internal Server Error', 501: 'Not Implemented', 502: 'Bad Gateway',
+  503: 'Service Unavailable', 504: 'Gateway Timeout'
+};
+
+function responseReason(code) {
+  return RESPONSE_REASONS[code] || 'Response ' + code;
+}
+
+function normalizeResponseCode(token) {
+  const t = String(token).trim();
+  if (/^default$/i.test(t)) return 'default';
+  if (/^[1-5]xx$/i.test(t)) return t[0] + 'XX';
+  if (/^[1-5]\d\d$/.test(t)) return t;
+  return null;
+}
+
+function quotedSpan(s) {
+  let i = 1;
+  while (i < s.length) {
+    if (s[i] === '\\') { i += 2; continue; }
+    if (s[i] === '"') return i + 1;
+    i += 1;
+  }
+  return 0;
+}
+
+function jsonTailStart(s) {
+  const brace = s.indexOf('{');
+  const bracket = s.indexOf('[');
+  const i = brace < 0 ? bracket : (bracket < 0 ? brace : Math.min(brace, bracket));
+  if (i < 0) return s.length;
+  try { JSON.parse(s.slice(i)); return i; } catch (e) { return s.length; }
+}
+
+function parseResponseMarker(raw) {
+  const text = String(raw === undefined ? '' : raw).trim();
+  const m = text.match(/^(\S+)\s*/);
+  const code = m && normalizeResponseCode(m[1]);
+  if (!code) return { error: 'the value must start with a status code — 100-599, a range such as 4XX, or default' };
+  let rest = text.slice(m[0].length).trim();
+  let description;
+  if (rest[0] === '"') {
+    const span = quotedSpan(rest);
+    if (span) {
+      description = unquote(rest.slice(0, span));
+      rest = rest.slice(span).trim();
+    } else {
+      description = rest;
+      rest = '';
+    }
+  } else if (rest && rest[0] !== '{' && rest[0] !== '[') {
+    const cut = jsonTailStart(rest);
+    description = rest.slice(0, cut).trim();
+    rest = rest.slice(cut).trim();
+  }
+  let example;
+  if (rest) {
+    try { example = JSON.parse(rest); }
+    catch (e) { return { error: 'the example after the code is not valid JSON' }; }
+  }
+  return { code: code, description: description, example: example };
+}
 
 const FIELD_APPLIES_TO = {
   pattern: 'string', minLength: 'string', maxLength: 'string',
@@ -254,5 +329,6 @@ module.exports = {
   scanTags, tidyDescription,
   SCHEMA_TAG_FIELDS, SCHEMA_FIELD_NAMES, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES,
   matchTagField, isArraySchema, fieldFitsNode,
-  coerceValue, coerceTagValue, resolveScalarType
+  coerceValue, coerceTagValue, resolveScalarType,
+  parseResponseMarker, responseReason
 };

@@ -771,4 +771,82 @@ const bodySnapshot = JSON.stringify(bodySpec);
 applyMarkers(bodySpec);
 assert(JSON.stringify(bodySpec) === bodySnapshot, '[exampleBody:] is idempotent');
 
+const respSpec3 = {
+  openapi: '3.0.0',
+  info: { title: 'T', version: '1' },
+  paths: { '/wnioski': { get: {
+    description: 'Odczyt wniosków. [response: 404 "Nie znaleziono wniosku" {"code": "NOT_FOUND"}] [response: 409] [response: 200 "OK — lista wniosków"] [response: 5XX "Błąd serwera"]',
+    responses: { '200': { description: 'OK', content: { 'application/json': { schema: { type: 'object' } } } } }
+  } } }
+};
+const respStats3 = applyMarkers(respSpec3);
+const respOp3 = respSpec3.paths['/wnioski'].get;
+assert(respOp3.responses['404'].description === 'Nie znaleziono wniosku', '[response:] adds a code with its description');
+assert(JSON.stringify(respOp3.responses['404'].content['application/json'].example) === '{"code":"NOT_FOUND"}',
+  '3.x: the JSON example lands in content, under the media type used by the other responses');
+assert(respOp3.responses['409'].description === 'Conflict', 'a bare code gets the standard HTTP reason phrase');
+assert(respOp3.responses['200'].description === 'OK — lista wniosków', 'an existing response only updates its description');
+assert(respOp3.responses['200'].content['application/json'].schema.type === 'object', 'the existing content is untouched');
+assert(respOp3.responses['5XX'].description === 'Błąd serwera', '3.x: a code range such as 5XX is allowed');
+assert(respOp3.description === 'Odczyt wniosków.', 'response markers removed from the description');
+assert(respStats3.responsesAdded === 3, 'three new responses counted (200 already existed)');
+assert(respStats3.examplesAdded === 1, 'the response example is counted');
+
+const respSnapshot3 = JSON.stringify(respSpec3);
+applyMarkers(respSpec3);
+assert(JSON.stringify(respSpec3) === respSnapshot3, '[response:] is idempotent');
+
+const respSpec2 = {
+  swagger: '2.0',
+  info: { title: 'T', version: '1' },
+  produces: ['application/json'],
+  paths: { '/platnosci': { post: {
+    produces: ['application/xml'],
+    summary: 'Płatność [response: 500 {"error": "X"}] [response: 4XX] [response: default "Błąd ogólny"] [response: 403 Brak uprawnień]',
+    responses: {}
+  } } }
+};
+const respStats2 = applyMarkers(respSpec2);
+const respOp2 = respSpec2.paths['/platnosci'].post;
+assert(respOp2.responses['500'].description === 'Internal Server Error', 'Swagger2: default reason phrase');
+assert(JSON.stringify(respOp2.responses['500'].examples['application/xml']) === '{"error":"X"}',
+  'Swagger2: the example lands in examples under the operation produces type');
+assert(respOp2.responses['default'].description === 'Błąd ogólny', 'the default response works');
+assert(respOp2.responses['403'].description === 'Brak uprawnień', 'an unquoted description is accepted');
+assert(respOp2.responses['4XX'] === undefined, 'Swagger2: a code range is NOT applied');
+assert(/\[response: 4XX\]/.test(respOp2.summary), 'the rejected range marker stays visible in summary');
+assert(respStats2.notApplied.some((n) => n.path === 'POST /platnosci' && /4XX/.test(n.reason)),
+  'the rejected range is reported with the operation label');
+
+const respMixed = {
+  openapi: '3.1.0',
+  info: { title: 'T', version: '1' },
+  paths: { '/x': { get: {
+    description: '[response: 410 Zasób usunięty {"gone": true}] [response: 999] [response: 404 "X" {zepsuty}] [response: 302]',
+    responses: { '302': { $ref: '#/components/responses/Redirect' } }
+  } } },
+  components: { responses: { Redirect: { description: 'Przekierowanie' } } }
+};
+const respStatsMixed = applyMarkers(respMixed);
+const respOpMixed = respMixed.paths['/x'].get;
+assert(respOpMixed.responses['410'].description === 'Zasób usunięty', 'unquoted description followed by JSON: split correctly');
+assert(respOpMixed.responses['410'].content['application/json'].example.gone === true,
+  'the JSON tail after an unquoted description becomes the example');
+assert(respOpMixed.responses['999'] === undefined && /\[response: 999\]/.test(respOpMixed.description),
+  'an invalid status code stays in the description');
+assert(respOpMixed.responses['404'] === undefined && /zepsuty/.test(respOpMixed.description),
+  'broken JSON: the marker is not applied');
+assert(respStatsMixed.notApplied.some((n) => /JSON/.test(n.reason)), 'broken JSON is reported with a reason');
+assert(respOpMixed.responses['302'].$ref === '#/components/responses/Redirect',
+  'a $ref response is untouched and the marker is reported');
+assert(respStatsMixed.notApplied.some((n) => /\$ref/.test(n.reason)), '$ref response reported');
+
+const respNoResponses = {
+  swagger: '2.0', info: { title: 'T', version: '1' },
+  paths: { '/y': { delete: { description: '[response: 204]' } } }
+};
+applyMarkers(respNoResponses);
+assert(respNoResponses.paths['/y'].delete.responses['204'].description === 'No Content',
+  'an operation without a responses object gets one');
+
 console.log('example-fill-test OK');

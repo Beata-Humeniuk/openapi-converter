@@ -57,6 +57,7 @@ Operation markers can appear in an operation's `description` or `summary`.
 | `[deprecated]` | Sets `deprecated: true`. |
 | `[consumes: <types>]` | Sets `consumes` in Swagger 2.0. In OpenAPI 3.x, changes request body media types. |
 | `[produces: <types>]` | Sets `produces` in Swagger 2.0. In OpenAPI 3.x, changes response media types. |
+| `[response: <code> "<description>" {...}]` | Adds a response with the given status code, an optional description, and an optional JSON example. See [`response`](#response). |
 
 Use `[x-<name>: <value>]` to add a vendor extension to a schema field or
 operation.
@@ -105,6 +106,53 @@ amount:
 
 The shared schema is not changed. OpenAPI 3.1 and later allow fields next to
 `$ref`, so no wrapper is needed.
+
+## `response`
+
+`[response: ...]` adds a response to the operation. It can appear in the
+operation's `description` or `summary`, once for every code you want to add.
+After the status code you can give a description and a JSON example — both are
+optional:
+
+```text
+Creates a payment.
+[response: 201 "Payment created" {"id": "PAY-001", "status": "NEW"}]
+[response: 409 "A payment with this ID already exists"]
+[response: 503]
+```
+
+becomes:
+
+```yaml
+responses:
+  '201':
+    description: Payment created
+    content:
+      application/json:
+        example:
+          id: PAY-001
+          status: NEW
+  '409':
+    description: A payment with this ID already exists
+  '503':
+    description: Service Unavailable
+```
+
+Value rules:
+
+- The status code is `100`–`599`, a range such as `4XX` (OpenAPI 3.x only),
+  or `default`. An invalid code keeps the marker in the description.
+- Without a description, the standard HTTP reason phrase is used, for example
+  `404` → `Not Found`.
+- The description may be unquoted (`[response: 403 No permission]`). Use
+  quotes when it contains brackets or braces.
+- The example must be valid JSON — an object or a list. In OpenAPI 3.x it is
+  written to `content.<type>.example`, using the media type the operation's
+  responses already use, or `application/json`. In Swagger 2.0 it is written
+  to `examples` under the first `produces` type.
+- If the response code already exists, the marker updates its description and
+  example, and everything else stays untouched. A response that is a `$ref`
+  reference is not changed.
 
 ## `exampleBody`
 

@@ -8,7 +8,8 @@ const {
   parseResponseMarker, parseCaseMarker, responseReason
 } = require('./markerScanner');
 
-// 2.0, 3.0, 3.1, 3.2 — decyduje o tym, ktore pola schematu wolno zapisac.
+const NULLABLE_REPLACED_BY_TYPE_NULL = 3.1;
+
 function specVersion(spec) {
   if (!spec || typeof spec !== 'object') return 3.0;
   if (spec.swagger === '2.0') return 2.0;
@@ -16,14 +17,8 @@ function specVersion(spec) {
   return isNaN(v) ? 3.0 : v;
 }
 
-// Swagger 2.0 ma zamkniety obiekt schematu: tylko wlasne pola i rozszerzenia
-// x-. Dla tych trzech markerow nie ma pola oficjalnego. Gdzie istnieje utarte
-// rozszerzenie, piszemy je; gdzie nie ma zadnego — znacznik zostaje w opisie.
-const SWAGGER2_SCHEMA_FIELD = {
-  nullable: 'x-nullable',
-  deprecated: 'x-deprecated',
-  writeOnly: null
-};
+const SWAGGER2_SCHEMA_EXTENSION = { nullable: 'x-nullable', deprecated: 'x-deprecated' };
+const NO_SWAGGER2_SCHEMA_FIELD = { writeOnly: true };
 
 function refSiblingsIgnored(spec) {
   if (!spec || typeof spec !== 'object') return false;
@@ -209,20 +204,16 @@ function applyFieldTags(node, stats, version, isSwagger2Param, host, arrayOf, wr
     if (!fieldFitsNode(field.name, value, placed.target, host)) continue;
 
     let name = field.name;
-    if (isSwagger2 && Object.prototype.hasOwnProperty.call(SWAGGER2_SCHEMA_FIELD, name)) {
-      const stand = SWAGGER2_SCHEMA_FIELD[name];
-      if (!stand) {
-        stats.notApplied.push({ path: path, reason: name +
-          ' has no field in Swagger 2.0 and no established x- extension — kept in the description' });
-        continue;
-      }
-      name = stand;
+    if (isSwagger2 && NO_SWAGGER2_SCHEMA_FIELD[name]) {
+      stats.notApplied.push({ path: path, reason: name +
+        ' has no field in Swagger 2.0 and no established x- extension — kept in the description' });
+      continue;
     }
+    if (isSwagger2 && SWAGGER2_SCHEMA_EXTENSION[name]) name = SWAGGER2_SCHEMA_EXTENSION[name];
 
     if (wrapRefs && wrapRefForSiblings(placed.target)) stats.refsWrapped += 1;
     if (name === 'example' && isSwagger2Param) name = 'x-example';
-    // 3.1 usunelo slowo kluczowe nullable na rzecz tablicy typow.
-    if (name === 'nullable' && version >= 3.1) {
+    if (name === 'nullable' && version >= NULLABLE_REPLACED_BY_TYPE_NULL) {
       if (value === true) markNullableType(placed.target);
       applied.push(tag);
       stats.tagFields += 1;
@@ -332,20 +323,19 @@ function requestExampleMime(op) {
   return keys.length ? keys[0] : 'application/json';
 }
 
-// Named example cases live in content.<type>.examples, which only OpenAPI 3.x
-// has. The whole media type object is returned so the caller can drop a plain
-// example: the two fields are mutually exclusive and a file carrying both is
-// rejected by validators.
+function mediaEntry(holder, mime) {
+  if (!holder.content || typeof holder.content !== 'object') holder.content = {};
+  if (!holder.content[mime] || typeof holder.content[mime] !== 'object') holder.content[mime] = {};
+  return holder.content[mime];
+}
+
 function caseMediaType(op, parsed, isResponse, stats) {
   if (!isResponse) {
     if (!op.requestBody || typeof op.requestBody !== 'object') {
       return { error: 'the operation has no request body' };
     }
     if (op.requestBody.$ref) return { error: 'the request body is a $ref reference — edit the shared body instead' };
-    const mime = requestExampleMime(op);
-    if (!op.requestBody.content || typeof op.requestBody.content !== 'object') op.requestBody.content = {};
-    if (!op.requestBody.content[mime] || typeof op.requestBody.content[mime] !== 'object') op.requestBody.content[mime] = {};
-    return { media: op.requestBody.content[mime], at: 'request' };
+    return { media: mediaEntry(op.requestBody, requestExampleMime(op)), at: 'request' };
   }
   if (!op.responses || typeof op.responses !== 'object') op.responses = {};
   let r = op.responses[parsed.code];
@@ -357,10 +347,7 @@ function caseMediaType(op, parsed, isResponse, stats) {
     op.responses[parsed.code] = r;
     stats.responsesAdded += 1;
   }
-  const mime = responseExampleMime(op, r);
-  if (!r.content || typeof r.content !== 'object') r.content = {};
-  if (!r.content[mime] || typeof r.content[mime] !== 'object') r.content[mime] = {};
-  return { media: r.content[mime], at: parsed.code };
+  return { media: mediaEntry(r, responseExampleMime(op, r)), at: parsed.code };
 }
 
 function applyCaseMarker(op, parsed, isResponse, isSwagger2, stats, host, label) {
@@ -372,8 +359,6 @@ function applyCaseMarker(op, parsed, isResponse, isSwagger2, stats, host, label)
   const media = spot.media;
 
   if (!media.examples || typeof media.examples !== 'object') media.examples = {};
-  // OpenAPI 3.x rejects a media type carrying both, and asking for cases says
-  // which one is wanted. Nothing to report: the marker did what it promised.
   delete media.example;
   const entry = {};
   if (parsed.summary) entry.summary = parsed.summary;
@@ -385,24 +370,25 @@ function applyCaseMarker(op, parsed, isResponse, isSwagger2, stats, host, label)
   return null;
 }
 
+function recordOutcome(problem, tag, done, stats, label) {
+  if (problem) stats.notApplied.push({ path: label || 'operation', reason: problem });
+  else done.add(tag);
+}
+
 function applyResponseTags(op, tags, isSwagger2, stats, rootProduces, label, host) {
   const done = new Set();
-  // [response:] first: a case may target a response the same note declares.
-  for (const tag of tags) {
-    if (String(tag.key).toLowerCase() !== 'response') continue;
+  const named = (tag, key) => String(tag.key).toLowerCase() === key;
+
+  for (const tag of tags.filter((t) => named(t, 'response'))) {
     const parsed = parseResponseMarker(tag.raw);
-    const problem = parsed.error || applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats, host, label);
-    if (problem) stats.notApplied.push({ path: label || 'operation', reason: problem });
-    else done.add(tag);
+    recordOutcome(parsed.error || applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats, host, label),
+      tag, done, stats, label);
   }
-  for (const tag of tags) {
-    const key = String(tag.key).toLowerCase();
-    if (key !== 'requestcase' && key !== 'responsecase') continue;
-    const isResponse = key === 'responsecase';
+  for (const tag of tags.filter((t) => named(t, 'requestcase') || named(t, 'responsecase'))) {
+    const isResponse = named(tag, 'responsecase');
     const parsed = parseCaseMarker(tag.raw, isResponse);
-    const problem = parsed.error || applyCaseMarker(op, parsed, isResponse, isSwagger2, stats, host, label);
-    if (problem) stats.notApplied.push({ path: label || 'operation', reason: problem });
-    else done.add(tag);
+    recordOutcome(parsed.error || applyCaseMarker(op, parsed, isResponse, isSwagger2, stats, host, label),
+      tag, done, stats, label);
   }
   return done;
 }
@@ -484,7 +470,11 @@ function stripDescriptionTags(description) {
 }
 
 function newStats() {
-  return { examplesAdded: 0, defaultsAdded: 0, fromTags: 0, mediaSet: 0, tagFields: 0, refsWrapped: 0, responsesAdded: 0, mismatched: [], unknownKeys: [], notApplied: [] };
+  return {
+    examplesAdded: 0, defaultsAdded: 0, fromTags: 0, mediaSet: 0,
+    tagFields: 0, refsWrapped: 0, responsesAdded: 0,
+    mismatched: [], unknownKeys: [], notApplied: []
+  };
 }
 
 function checkPatternAgainstExample(node, path, stats) {

@@ -351,7 +351,10 @@ function parseCaseMarker(raw, withCode) {
     rest = rest.slice(m[0].length).trim();
   }
   const n = rest.match(/^([A-Za-z][A-Za-z0-9_-]*)\s*/);
-  if (!n) return { error: 'the case needs a name, for example [' + (withCode ? 'responseCase: 200 ' : 'requestCase: ') + 'confirmed {...}]' };
+  if (!n) {
+    const sample = withCode ? 'responseCase: 200 ' : 'requestCase: ';
+    return { error: 'the case needs a name, for example [' + sample + 'confirmed {...}]' };
+  }
   const name = n[1];
   rest = rest.slice(n[0].length).trim();
 

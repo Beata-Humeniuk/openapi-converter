@@ -240,6 +240,9 @@ function applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats, host, 
   if (isSwagger2 && /XX$/.test(parsed.code)) {
     return 'the ' + parsed.code + ' code range needs OpenAPI 3.x — Swagger 2.0 accepts only exact codes';
   }
+  if (parsed.ref && !(host && host[parsed.ref])) {
+    return 'the body schema ' + parsed.ref + ' does not exist in the file';
+  }
   if (!op.responses || typeof op.responses !== 'object') op.responses = {};
   let r = op.responses[parsed.code];
   if (r && typeof r === 'object' && r.$ref) {
@@ -252,20 +255,25 @@ function applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats, host, 
   } else if (parsed.description) {
     r.description = parsed.description;
   }
-  if (parsed.example !== undefined) {
-    let schema;
-    if (isSwagger2) {
+  if (parsed.ref === undefined && parsed.example === undefined) return null;
+  let schema;
+  if (isSwagger2) {
+    if (parsed.ref) r.schema = { $ref: '#/definitions/' + parsed.ref };
+    schema = r.schema;
+    if (parsed.example !== undefined) {
       const mime = (op.produces && op.produces[0]) || (rootProduces && rootProduces[0]) || 'application/json';
       if (!r.examples || typeof r.examples !== 'object') r.examples = {};
       r.examples[mime] = parsed.example;
-      schema = r.schema;
-    } else {
-      const mime = responseExampleMime(op, r);
-      if (!r.content || typeof r.content !== 'object') r.content = {};
-      if (!r.content[mime] || typeof r.content[mime] !== 'object') r.content[mime] = {};
-      r.content[mime].example = parsed.example;
-      schema = r.content[mime].schema;
     }
+  } else {
+    const mime = responseExampleMime(op, r);
+    if (!r.content || typeof r.content !== 'object') r.content = {};
+    if (!r.content[mime] || typeof r.content[mime] !== 'object') r.content[mime] = {};
+    if (parsed.ref) r.content[mime].schema = { $ref: '#/components/schemas/' + parsed.ref };
+    schema = r.content[mime].schema;
+    if (parsed.example !== undefined) r.content[mime].example = parsed.example;
+  }
+  if (parsed.example !== undefined) {
     stats.examplesAdded += 1;
     reportUnknownExampleKeys(parsed.example, schema, host, (label ? label + ' ' : '') + parsed.code, stats);
   }

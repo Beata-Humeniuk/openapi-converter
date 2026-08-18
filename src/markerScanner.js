@@ -134,6 +134,11 @@ function jsonTailStart(s) {
   try { JSON.parse(s.slice(i)); return i; } catch (e) { return s.length; }
 }
 
+function normalizeSchemaRef(token) {
+  const m = String(token).match(/^#(?:\/(?:definitions|components\/schemas)\/)?([^/\s]+)$/);
+  return m ? m[1] : null;
+}
+
 function parseResponseMarker(raw) {
   const text = String(raw === undefined ? '' : raw).trim();
   const m = text.match(/^(\S+)\s*/);
@@ -150,17 +155,25 @@ function parseResponseMarker(raw) {
       description = rest;
       rest = '';
     }
-  } else if (rest && rest[0] !== '{' && rest[0] !== '[') {
-    const cut = jsonTailStart(rest);
+  } else if (rest && rest[0] !== '{' && rest[0] !== '[' && rest[0] !== '#') {
+    const hash = rest.search(/\s#/);
+    const cut = Math.min(jsonTailStart(rest), hash < 0 ? rest.length : hash);
     description = rest.slice(0, cut).trim();
     rest = rest.slice(cut).trim();
+  }
+  let ref;
+  if (rest[0] === '#') {
+    const token = rest.match(/^(\S+)\s*/);
+    ref = normalizeSchemaRef(token[1]);
+    if (!ref) return { error: 'the body schema must look like #Name or #/components/schemas/Name' };
+    rest = rest.slice(token[0].length).trim();
   }
   let example;
   if (rest) {
     try { example = JSON.parse(rest); }
     catch (e) { return { error: 'the example after the code is not valid JSON' }; }
   }
-  return { code: code, description: description, example: example };
+  return { code: code, description: description, ref: ref, example: example };
 }
 
 const FIELD_APPLIES_TO = {

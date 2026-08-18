@@ -892,6 +892,54 @@ assert(schemaCheckStats2.unknownKeys.indexOf('GET /lista 400[].obcy') >= 0,
   'Swagger2: list items are checked against the item schema');
 assert(schemaCheckStats2.unknownKeys.indexOf('GET /lista 400[].powod') < 0, 'Swagger2: a known item key is fine');
 
+const respBodySpec3 = {
+  openapi: '3.0.0',
+  info: { title: 'T', version: '1' },
+  paths: { '/zamowienia': { post: {
+    description: 'Zamówienie. [response: 404 "Nie znaleziono" #Blad {"code": "NOT_FOUND", "zly": 1}] [response: 409 #/components/schemas/Blad] [response: 410 #Nieistnieje] [response: 422 {"code": "X"}]',
+    responses: { '200': { description: 'OK', content: { 'application/xml': { schema: { type: 'object' } } } } }
+  } } },
+  components: { schemas: { Blad: { type: 'object', properties: { code: { type: 'string' } } } } }
+};
+const respBodyStats3 = applyMarkers(respBodySpec3);
+const respBodyOp3 = respBodySpec3.paths['/zamowienia'].post;
+assert(respBodyOp3.responses['404'].content['application/xml'].schema.$ref === '#/components/schemas/Blad',
+  '3.x: #Blad becomes the body schema, under the media type the operation already uses');
+assert(respBodyOp3.responses['404'].content['application/xml'].example.code === 'NOT_FOUND',
+  'the example sits next to the body schema');
+assert(respBodyStats3.unknownKeys.indexOf('POST /zamowienia 404.zly') >= 0,
+  'the example is checked against the body schema given in the same marker');
+assert(respBodyOp3.responses['404'].description === 'Nie znaleziono', 'description + schema + example in one marker');
+assert(respBodyOp3.responses['409'].content['application/xml'].schema.$ref === '#/components/schemas/Blad',
+  'a full JSON pointer also works, without an example');
+assert(respBodyOp3.responses['409'].description === 'Conflict', 'schema-only marker still gets the reason phrase');
+assert(respBodyOp3.responses['410'] === undefined && /#Nieistnieje/.test(respBodyOp3.description),
+  'a schema that does not exist in the file: the marker stays visible');
+assert(respBodyStats3.notApplied.some((n) => /Nieistnieje/.test(n.reason)), 'and is reported with a reason');
+assert(respBodyOp3.responses['422'].content['application/xml'].schema === undefined,
+  'a marker without # adds no schema — the example stands alone');
+
+const respBodySnapshot3 = JSON.stringify(respBodySpec3);
+applyMarkers(respBodySpec3);
+assert(JSON.stringify(respBodySpec3) === respBodySnapshot3, 'body schema markers are idempotent');
+
+const respBodySpec2 = {
+  swagger: '2.0', info: { title: 'T', version: '1' },
+  paths: { '/zamowienia': { post: {
+    summary: 'Zamówienie [response: 500 Wewnętrzny błąd #Blad {"code": "ERR"}]',
+    responses: {}
+  } } },
+  definitions: { Blad: { type: 'object', properties: { code: { type: 'string' } } } }
+};
+applyMarkers(respBodySpec2);
+const respBodyOp2 = respBodySpec2.paths['/zamowienia'].post;
+assert(respBodyOp2.responses['500'].schema.$ref === '#/definitions/Blad', 'Swagger2: the body schema lands in schema');
+assert(respBodyOp2.responses['500'].description === 'Wewnętrzny błąd',
+  'an unquoted description ends where the #schema token starts');
+assert(JSON.stringify(respBodyOp2.responses['500'].examples['application/json']) === '{"code":"ERR"}',
+  'Swagger2: the example still lands in examples');
+assert(respBodyOp2.summary === 'Zamówienie', 'the marker is removed from summary');
+
 const respNoResponses = {
   swagger: '2.0', info: { title: 'T', version: '1' },
   paths: { '/y': { delete: { description: '[response: 204]' } } }

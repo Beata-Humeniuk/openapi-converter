@@ -59,7 +59,7 @@ Operation markers can appear in an operation's `description` or `summary`.
 | `[produces: <types>]` | Sets `produces` in Swagger 2.0. In OpenAPI 3.x, changes response media types. |
 | `[response: <code> "<description>" #<Schema> {...}]` | Adds a response with the given status code, an optional description, an optional body schema, and an optional JSON example. See [`response`](#response). |
 | `[responseCase: <code> <name> "<summary>" {...}]` | Adds one named example case to a response. OpenAPI 3.x only. See [`responseCase` and `requestCase`](#responsecase-and-requestcase). |
-| `[requestCase: <name> "<summary>" {...}]` | Adds one named example case to the request body. OpenAPI 3.x only. |
+| `[requestCase: <name> "<summary>" {...}]` | Adds one named example case to the request body. OpenAPI 3.x only. See [`responseCase` and `requestCase`](#responsecase-and-requestcase). |
 
 Use `[x-<name>: <value>]` to add a vendor extension to a schema field or
 operation.
@@ -231,8 +231,9 @@ responses:
             value: { orderId: ORD-2, status: AWAITING_PAYMENT }
 ```
 
-Swagger UI shows the case names in a dropdown, so a reader can switch between
-them.
+Swagger UI puts the cases in a dropdown, so a reader can switch between them.
+It labels each entry with the case summary, falling back to the case name when
+the case has no summary.
 
 Value rules:
 
@@ -240,7 +241,8 @@ Value rules:
   for a name, so the marker is not applied: it stays in the description and is
   listed in the report. Convert the file to 3.x first, then apply the markers.
 - The case name comes right after the status code (`responseCase`) or first
-  (`requestCase`). It may contain letters, digits, `_` and `-`.
+  (`requestCase`). It starts with a letter and may go on with letters, digits,
+  `_` and `-`.
 - The summary is optional, quoted or unquoted. The example itself is required
   and must be valid JSON.
 - Cases are written in the order the markers appear. Repeating a name
@@ -253,6 +255,12 @@ Value rules:
 - Case values are checked against the schema the same way as in
   [`response`](#response); unknown keys are reported with the case name, for
   example `POST /orders 200 [confirmed].typo`.
+- `[example:]` markers on schema fields keep working alongside cases: they sit
+  on the schema, cases sit on the media type, so nothing collides. Where a
+  response has cases, the reader sees the cases; where it has none, the example
+  is still built from the field values. A case carries the whole body, so a
+  field left out of a case is absent from that case — field examples are not
+  merged in.
 
 ## `exampleBody`
 

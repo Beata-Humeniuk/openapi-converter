@@ -53,13 +53,33 @@ requestNumber:
   example: RQ/2026/000123
 ```
 
+Markers also work at the operation level. `[response:]` adds a status code with
+its description, body schema, and example, and `[responseCase:]` /
+`[requestCase:]` add several named example cases to one code or to the request
+body, which Swagger UI shows in a dropdown:
+
+```text
+Creates an order.
+[response: 404 "Order not found" #ApiError {"code": "NOT_FOUND"}]
+[responseCase: 200 confirmed "Confirmed straight away" {"orderId": "ORD-1"}]
+[responseCase: 200 awaitingPayment "Waiting for payment" {"orderId": "ORD-2"}]
+```
+
+Markers add to what the file already has: status codes that came from a
+generator stay as they are, and a marker naming an existing code changes only
+the parts it gives.
+
 Unsupported markers, such as `[TODO: ...]`, remain unchanged. Invalid values
-are not applied. Running the command again does not change an already processed
-file.
+are not applied — the marker stays visible in the description, and the
+extension lists what it could not apply, which example keys are missing from
+the model, and which examples contradict their pattern. Running the command
+again does not change an already processed file.
 
 **OpenAPI: Convert Version** applies supported markers before converting the
-file. See the [marker reference](docs/MARKERS.md) for all supported markers and
-value rules. A complete example is available in
+file. Markers that only OpenAPI 3.x supports, such as named cases, therefore
+need the file converted first: convert, then run **Apply Markers** on the
+result. See the [marker reference](docs/MARKERS.md) for all supported markers
+and value rules. A complete example is available in
 [examples/markers-swagger2.json](examples/markers-swagger2.json).
 
 ## Privacy and security

@@ -228,8 +228,6 @@ async function convertCommand(uri) {
   const isYaml = await pickFormat('Format');
   if (isYaml === null) return;
 
-  const tagStats = liftDescriptionTags(spec);
-
   let openapi, warnings;
   try {
     ({ openapi, warnings } = await convertSpec(spec, targetPick.target));
@@ -237,6 +235,12 @@ async function convertCommand(uri) {
     vscode.window.showErrorMessage('Conversion failed: ' + (e.message || String(e)));
     return;
   }
+
+  // Markers are applied to the converted document, never to the source, so
+  // every marker is judged by what the TARGET version supports: converting
+  // upwards applies the markers the new version has gained, and converting
+  // downwards leaves the ones it lost in the descriptions.
+  const tagStats = liftDescriptionTags(openapi);
 
   if (warnings && warnings.length) {
     const pick = await vscode.window.showWarningMessage(
@@ -255,8 +259,10 @@ async function convertCommand(uri) {
   const content = serialize(canonicalOrder(openapi), isYaml);
   await showResult(content, isYaml, source);
   const lifted = tagStats.tagFields + tagStats.mediaSet;
+  const kept = tagStats.notApplied.length;
   await offerSaveBeside(source, content, isYaml, 'Converted ' + fromLabel + ' → ' + targetPick.label + '.' +
-    (lifted ? ' Moved ' + lifted + ' marker values into OpenAPI fields.' : ''));
+    (lifted ? ' Moved ' + lifted + ' marker values into OpenAPI fields.' : '') +
+    (kept ? ' ' + kept + ' markers stayed in the descriptions — ' + targetPick.label + ' does not support them.' : ''));
 }
 
 function activate(context) {

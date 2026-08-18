@@ -280,5 +280,19 @@ Structural fields such as `type`, `required`, `properties`, `$ref`, and
 `[0..1]`, also remain in the description.
 
 The command does not create values for fields without markers. Running it more
-than once produces the same result. **OpenAPI: Convert Version** applies markers
-before converting the file.
+than once produces the same result.
+
+## Markers and the target version
+
+**OpenAPI: Convert Version** converts the file first and applies the markers to
+the result, so the version you convert **to** decides what each marker can do:
+
+| You have | You convert to | What happens |
+|---|---|---|
+| Swagger 2.0 with markers | OpenAPI 3.x | Everything the newer version supports is applied in one step — named cases and code ranges included. No second command to run. |
+| Swagger 2.0, markers already applied once | OpenAPI 3.x | The markers that 2.0 could not use are still in the descriptions; the conversion applies them. Nothing is left over. |
+| any version | a version without support | The markers that version cannot use stay in the descriptions and are listed after the command finishes. |
+| OpenAPI 3.x with markers | Swagger 2.0 | What 2.0 supports is applied in 2.0 form — `x-nullable`, `x-example`, `schema` and `examples` — and the rest stays in the descriptions. |
+
+**OpenAPI: Apply Markers** changes the file in place and never converts it, so
+there the file's own version decides.

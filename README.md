@@ -75,11 +75,15 @@ extension lists what it could not apply, which example keys are missing from
 the model, and which examples contradict their pattern. Running the command
 again does not change an already processed file.
 
-**OpenAPI: Convert Version** applies supported markers before converting the
-file. Markers that only OpenAPI 3.x supports, such as named cases, therefore
-need the file converted first: convert, then run **Apply Markers** on the
-result. See the [marker reference](docs/MARKERS.md) for all supported markers
-and value rules. A complete example is available in
+**OpenAPI: Convert Version** applies the markers to the converted file, so each
+marker is judged by the version you convert to. Converting a Swagger 2.0 file
+upwards applies the markers the newer version has gained — named cases and code
+ranges included — in one step, with no second command to run. Converting
+downwards applies what the older version still supports and leaves the rest in
+the descriptions, listed after the command finishes.
+
+See the [marker reference](docs/MARKERS.md) for all supported markers and value
+rules. A complete example is available in
 [examples/markers-swagger2.json](examples/markers-swagger2.json).
 
 ## Privacy and security

@@ -841,6 +841,57 @@ assert(respOpMixed.responses['302'].$ref === '#/components/responses/Redirect',
   'a $ref response is untouched and the marker is reported');
 assert(respStatsMixed.notApplied.some((n) => /\$ref/.test(n.reason)), '$ref response reported');
 
+const respSchemaCheck3 = {
+  openapi: '3.0.0',
+  info: { title: 'T', version: '1' },
+  paths: { '/bledy': { get: {
+    description: '[response: 404 {"code": "NOT_FOUND", "detale": {"pole": "id", "literowka": 1}, "zupelnieObce": true}] [response: 409 {"code": "CONFLICT"}]',
+    responses: {
+      '404': { description: 'stary opis', content: { 'application/json': { schema: { $ref: '#/components/schemas/Blad' } } } },
+      '409': { description: 'Konflikt', content: { 'application/json': { schema: { $ref: '#/components/schemas/Blad' } } } }
+    }
+  } } },
+  components: { schemas: {
+    Blad: {
+      type: 'object',
+      properties: {
+        code: { type: 'string' },
+        detale: { type: 'object', properties: { pole: { type: 'string' } } }
+      }
+    }
+  } }
+};
+const schemaCheckStats = applyMarkers(respSchemaCheck3);
+const checkedOp = respSchemaCheck3.paths['/bledy'].get;
+assert(checkedOp.responses['404'].content['application/json'].example.code === 'NOT_FOUND',
+  'the example is applied even when some keys are unknown — like [exampleBody:]');
+assert(schemaCheckStats.unknownKeys.indexOf('GET /bledy 404.zupelnieObce') >= 0,
+  'a key outside the response schema is reported with the operation and code');
+assert(schemaCheckStats.unknownKeys.indexOf('GET /bledy 404.detale.literowka') >= 0,
+  'the check descends into nested objects');
+assert(schemaCheckStats.unknownKeys.indexOf('GET /bledy 404.code') < 0 &&
+  schemaCheckStats.unknownKeys.indexOf('GET /bledy 409.code') < 0,
+  'keys present in the model are not reported');
+assert(checkedOp.responses['404'].content['application/json'].example !== checkedOp.responses['409'].content['application/json'].example,
+  'each code keeps its own example even though both share the Blad schema');
+assert(respSchemaCheck3.components.schemas.Blad.properties.code.example === undefined,
+  'the shared schema stays untouched — per-code examples live on the responses');
+
+const respSchemaCheck2 = {
+  swagger: '2.0', info: { title: 'T', version: '1' },
+  paths: { '/lista': { get: {
+    description: '[response: 400 [{"powod": "X", "obcy": 1}]]',
+    responses: { '400': { description: 'Błąd', schema: { type: 'array', items: { $ref: '#/definitions/Powod' } } } }
+  } } },
+  definitions: { Powod: { type: 'object', properties: { powod: { type: 'string' } } } }
+};
+const schemaCheckStats2 = applyMarkers(respSchemaCheck2);
+assert(JSON.stringify(respSchemaCheck2.paths['/lista'].get.responses['400'].examples['application/json']) ===
+  '[{"powod":"X","obcy":1}]', 'Swagger2: a list example lands in examples');
+assert(schemaCheckStats2.unknownKeys.indexOf('GET /lista 400[].obcy') >= 0,
+  'Swagger2: list items are checked against the item schema');
+assert(schemaCheckStats2.unknownKeys.indexOf('GET /lista 400[].powod') < 0, 'Swagger2: a known item key is fine');
+
 const respNoResponses = {
   swagger: '2.0', info: { title: 'T', version: '1' },
   paths: { '/y': { delete: { description: '[response: 204]' } } }

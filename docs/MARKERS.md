@@ -150,6 +150,10 @@ Value rules:
   written to `content.<type>.example`, using the media type the operation's
   responses already use, or `application/json`. In Swagger 2.0 it is written
   to `examples` under the first `produces` type.
+- When the response has a schema, the example keys are checked against it —
+  unknown keys are listed after the command finishes, the same way
+  [`exampleBody`](#examplebody) reports them. The shared schema itself is not
+  changed, so each response code keeps its own example.
 - If the response code already exists, the marker updates its description and
   example, and everything else stays untouched. A response that is a `$ref`
   reference is not changed.

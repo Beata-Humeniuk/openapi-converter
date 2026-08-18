@@ -110,7 +110,7 @@ async function applyMarkersCommand(uri) {
   if (stats.mismatched.length || stats.unknownKeys.length || stats.notApplied.length) {
     const notes = [];
     if (stats.mismatched.length) notes.push(stats.mismatched.length + ' fields: example does not match the pattern.');
-    if (stats.unknownKeys.length) notes.push(stats.unknownKeys.length + ' keys in [exampleBody:] not found in the model.');
+    if (stats.unknownKeys.length) notes.push(stats.unknownKeys.length + ' example keys not found in the model.');
     if (stats.notApplied.length) notes.push(stats.notApplied.length + ' markers not applied.');
     const pick = await vscode.window.showWarningMessage(message + ' ' + notes.join(' '), 'Show fields');
     if (pick === 'Show fields') {
@@ -123,7 +123,7 @@ async function applyMarkersCommand(uri) {
           stats.mismatched.map((s) => '- ' + s).join('\n'));
       }
       if (stats.unknownKeys.length) {
-        sections.push('# Keys from [exampleBody:] not found in the model\n\n' +
+        sections.push('# Example keys not found in the model\n\n' +
           'They were not inserted — usually a typo in the field name,\n' +
           'or a field the model does not know.\n\n' +
           stats.unknownKeys.map((s) => '- ' + s).join('\n'));

@@ -311,9 +311,9 @@
           "description": "Adres e-mail — format i wzorzec ze znaczników, bez przykładu. [format: \"email\"] [pattern: \"^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$\"]"
         },
         "telefon": { "type": "string" },
-        "pesel": { "type": "string" },
-        "nip": { "type": "string" },
-        "iban": { "type": "string" },
+        "identyfikator": { "type": "string" },
+        "numerRejestrowy": { "type": "string" },
+        "numerReferencyjny": { "type": "string" },
         "waluta": { "type": "string" }
       }
     },

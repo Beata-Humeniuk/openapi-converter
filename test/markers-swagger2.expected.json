@@ -488,13 +488,13 @@
           "telefon": {
             "type": "string"
           },
-          "pesel": {
+          "identyfikator": {
             "type": "string"
           },
-          "nip": {
+          "numerRejestrowy": {
             "type": "string"
           },
-          "iban": {
+          "numerReferencyjny": {
             "type": "string"
           },
           "waluta": {

@@ -133,7 +133,7 @@ const spec3 = {
         type: 'object',
         properties: {
           imie: { type: 'string' },
-          pesel: { type: 'string', pattern: '^\\d{11}$' },
+          identyfikator: { type: 'string', pattern: '^\\d{8}$' },
           tajemniczy: { type: 'string', pattern: '^(?!x)y$' }
         }
       }
@@ -154,7 +154,7 @@ assert(P.zalaczniki.items.example === undefined, 'format on items does not gener
 assert(P.gotowy.example === 'zostaje', 'existing example untouched');
 assert(P.klient.example === undefined, 'object referenced via $ref gets no example');
 assert(K.imie.example === undefined, 'no name-based heuristics');
-assert(K.pesel.example === undefined, 'a pattern does not generate a value');
+assert(K.identyfikator.example === undefined, 'a pattern does not generate a value');
 const paramSchema = spec3.paths['/wnioski/{id}'].get.parameters[0].schema;
 assert(paramSchema.example === undefined, 'a parameter without a marker stays without an example');
 
@@ -170,7 +170,7 @@ const spec2 = {
     '/klienci': {
       get: {
         parameters: [
-          { name: 'pesel', in: 'query', type: 'string', pattern: '^\\d{11}$' },
+          { name: 'identyfikator', in: 'query', type: 'string', pattern: '^\\d{8}$' },
           { name: 'strona', in: 'query', type: 'integer', minimum: 1 },
           { name: 'body', in: 'body', schema: { $ref: '#/definitions/Filtr' } }
         ],
@@ -188,10 +188,10 @@ const params = spec2.paths['/klienci'].get.parameters;
 assert(params[0]['x-example'] === undefined, 'Swagger2 param without a marker stays empty');
 assert(spec2.definitions.Filtr.properties.miasto.example === undefined, 'fields in definitions are not filled either');
 
-spec2.paths['/klienci'].get.parameters[0].description = 'PESEL [example: "90010112345"]';
+spec2.paths['/klienci'].get.parameters[0].description = 'Identyfikator [example: "00000001"]';
 spec2.definitions.Filtr.properties.miasto.description = '[example: "Warszawa"]';
 applyMarkers(spec2);
-assert(params[0]['x-example'] === '90010112345', 'Swagger2 query param with a marker → x-example');
+assert(params[0]['x-example'] === '00000001', 'Swagger2 query param with a marker → x-example');
 assert(spec2.definitions.Filtr.properties.miasto.example === 'Warszawa', 'field in definitions with a marker');
 
 const specConv = {

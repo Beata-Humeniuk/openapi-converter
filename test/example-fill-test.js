@@ -1037,4 +1037,54 @@ assert(noBodyStats.notApplied.some((n) => /needs a name/.test(n.reason)), 'a cas
 assert(caseNoBody.paths['/o'].get.responses['200'].content['application/json'].examples.y.value.b === 2,
   'the valid case in the same description is still applied');
 
+// Kontrakt wygenerowany przez narzedzie ma juz czesc kodow. Znaczniki maja je
+// uzupelnic, nie zastapic — to gwarancja, na ktorej opiera sie caly przeplyw.
+const mergeSpec = {
+  openapi: '3.1.0', info: { title: 'T', version: '1' },
+  paths: { '/orders/{id}': { get: { operationId: 'getOrder',
+    description: 'Pobiera zamowienie.\n' +
+      '[response: 404 "Nie znaleziono" #ApiError {"code": "NOT_FOUND"}]\n' +
+      '[response: 400 "Opis z markera"]\n' +
+      '[response: 409 #InnyBlad]\n' +
+      '[responseCase: 500 awaria "Case" {"code": "INTERNAL"}]',
+    responses: {
+      '200': { description: 'OK z generatora',
+               headers: { 'X-Request-Id': { schema: { type: 'string' } } },
+               content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } },
+      '400': { description: 'Stary opis z generatora',
+               headers: { 'X-Id': { schema: { type: 'string' } } },
+               content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+      '409': { description: 'Konflikt z generatora',
+               content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+      '500': { description: 'Blad z generatora',
+               content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } }
+    } } } },
+  components: { schemas: {
+    Order: { type: 'object', properties: { orderId: { type: 'string' } } },
+    ApiError: { type: 'object', properties: { code: { type: 'string' } } },
+    InnyBlad: { type: 'object', properties: { err: { type: 'string' } } }
+  } }
+};
+const before200 = JSON.stringify(mergeSpec.paths['/orders/{id}'].get.responses['200']);
+applyMarkers(mergeSpec);
+const mergeOp = mergeSpec.paths['/orders/{id}'].get;
+
+assert(Object.keys(mergeOp.responses).join() === '200,400,404,409,500',
+  'codes from the generator survive and the marker codes are added alongside');
+assert(JSON.stringify(mergeOp.responses['200']) === before200,
+  'a response no marker mentions is byte-identical afterwards, headers included');
+assert(mergeOp.responses['400'].description === 'Opis z markera',
+  'a description given by the marker replaces the generated one');
+assert(mergeOp.responses['400'].headers['X-Id'] !== undefined &&
+  mergeOp.responses['400'].content['application/json'].schema.$ref === '#/components/schemas/ApiError',
+  'but the headers and the schema the marker did not mention stay');
+assert(mergeOp.responses['409'].description === 'Konflikt z generatora',
+  'a schema-only marker leaves the generated description alone');
+assert(mergeOp.responses['409'].content['application/json'].schema.$ref === '#/components/schemas/InnyBlad',
+  'and swaps only the schema it names');
+assert(mergeOp.responses['500'].description === 'Blad z generatora' &&
+  mergeOp.responses['500'].content['application/json'].examples.awaria !== undefined &&
+  mergeOp.responses['500'].content['application/json'].schema.$ref === '#/components/schemas/ApiError',
+  'a case added to a generated response keeps its description and schema');
+
 console.log('example-fill-test OK');

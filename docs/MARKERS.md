@@ -182,8 +182,10 @@ Value rules:
   unknown keys are listed after the command finishes, the same way
   [`exampleBody`](#examplebody) reports them. The shared schema itself is not
   changed, so each response code keeps its own example.
-- If the response code already exists, the marker updates only the parts it
-  gives — description, body schema, or example — and everything else stays
+- Markers add to what the file already has. Response codes produced by a
+  generator stay: a code no marker mentions is left exactly as it was, headers
+  and all. If the marker names a code that already exists, it updates only the
+  parts it gives — description, body schema, or example — and the rest stays
   untouched. A response that is a `$ref` reference is not changed.
 - A marker that cannot be applied — an invalid code, broken JSON, an unknown
   schema name, a code range in Swagger 2.0 — stays in the description and is

@@ -343,7 +343,7 @@
             "description": "Pole wycofywane.",
             "x-legacy-name": "agreementPortfolio",
             "example": "X",
-            "deprecated": true
+            "x-deprecated": true
           },
           "optionalRemark": {
             "type": "string",
@@ -353,9 +353,8 @@
           },
           "secret": {
             "type": "string",
-            "description": "Tylko do zapisu.",
-            "example": "tajne",
-            "writeOnly": true
+            "description": "Tylko do zapisu. [writeOnly]",
+            "example": "tajne"
           },
           "unsupportedPattern": {
             "type": "string",
@@ -489,13 +488,13 @@
           "telefon": {
             "type": "string"
           },
-          "pesel": {
+          "identyfikator": {
             "type": "string"
           },
-          "nip": {
+          "numerRejestrowy": {
             "type": "string"
           },
-          "iban": {
+          "numerReferencyjny": {
             "type": "string"
           },
           "waluta": {

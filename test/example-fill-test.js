@@ -133,7 +133,7 @@ const spec3 = {
         type: 'object',
         properties: {
           imie: { type: 'string' },
-          pesel: { type: 'string', pattern: '^\\d{11}$' },
+          identyfikator: { type: 'string', pattern: '^\\d{8}$' },
           tajemniczy: { type: 'string', pattern: '^(?!x)y$' }
         }
       }
@@ -154,7 +154,7 @@ assert(P.zalaczniki.items.example === undefined, 'format on items does not gener
 assert(P.gotowy.example === 'zostaje', 'existing example untouched');
 assert(P.klient.example === undefined, 'object referenced via $ref gets no example');
 assert(K.imie.example === undefined, 'no name-based heuristics');
-assert(K.pesel.example === undefined, 'a pattern does not generate a value');
+assert(K.identyfikator.example === undefined, 'a pattern does not generate a value');
 const paramSchema = spec3.paths['/wnioski/{id}'].get.parameters[0].schema;
 assert(paramSchema.example === undefined, 'a parameter without a marker stays without an example');
 
@@ -170,7 +170,7 @@ const spec2 = {
     '/klienci': {
       get: {
         parameters: [
-          { name: 'pesel', in: 'query', type: 'string', pattern: '^\\d{11}$' },
+          { name: 'identyfikator', in: 'query', type: 'string', pattern: '^\\d{8}$' },
           { name: 'strona', in: 'query', type: 'integer', minimum: 1 },
           { name: 'body', in: 'body', schema: { $ref: '#/definitions/Filtr' } }
         ],
@@ -188,10 +188,10 @@ const params = spec2.paths['/klienci'].get.parameters;
 assert(params[0]['x-example'] === undefined, 'Swagger2 param without a marker stays empty');
 assert(spec2.definitions.Filtr.properties.miasto.example === undefined, 'fields in definitions are not filled either');
 
-spec2.paths['/klienci'].get.parameters[0].description = 'PESEL [example: "90010112345"]';
+spec2.paths['/klienci'].get.parameters[0].description = 'Identyfikator [example: "00000001"]';
 spec2.definitions.Filtr.properties.miasto.description = '[example: "Warszawa"]';
 applyMarkers(spec2);
-assert(params[0]['x-example'] === '90010112345', 'Swagger2 query param with a marker → x-example');
+assert(params[0]['x-example'] === '00000001', 'Swagger2 query param with a marker → x-example');
 assert(spec2.definitions.Filtr.properties.miasto.example === 'Warszawa', 'field in definitions with a marker');
 
 const specConv = {
@@ -770,5 +770,346 @@ assert(/\[exampleBody:/.test(BW.skalar.description), 'an unapplied marker stays 
 const bodySnapshot = JSON.stringify(bodySpec);
 applyMarkers(bodySpec);
 assert(JSON.stringify(bodySpec) === bodySnapshot, '[exampleBody:] is idempotent');
+
+const respSpec3 = {
+  openapi: '3.0.0',
+  info: { title: 'T', version: '1' },
+  paths: { '/wnioski': { get: {
+    description: 'Odczyt wniosków. [response: 404 "Nie znaleziono wniosku" {"code": "NOT_FOUND"}] [response: 409] [response: 200 "OK — lista wniosków"] [response: 5XX "Błąd serwera"]',
+    responses: { '200': { description: 'OK', content: { 'application/json': { schema: { type: 'object' } } } } }
+  } } }
+};
+const respStats3 = applyMarkers(respSpec3);
+const respOp3 = respSpec3.paths['/wnioski'].get;
+assert(respOp3.responses['404'].description === 'Nie znaleziono wniosku', '[response:] adds a code with its description');
+assert(JSON.stringify(respOp3.responses['404'].content['application/json'].example) === '{"code":"NOT_FOUND"}',
+  '3.x: the JSON example lands in content, under the media type used by the other responses');
+assert(respOp3.responses['409'].description === 'Conflict', 'a bare code gets the standard HTTP reason phrase');
+assert(respOp3.responses['200'].description === 'OK — lista wniosków', 'an existing response only updates its description');
+assert(respOp3.responses['200'].content['application/json'].schema.type === 'object', 'the existing content is untouched');
+assert(respOp3.responses['5XX'].description === 'Błąd serwera', '3.x: a code range such as 5XX is allowed');
+assert(respOp3.description === 'Odczyt wniosków.', 'response markers removed from the description');
+assert(respStats3.responsesAdded === 3, 'three new responses counted (200 already existed)');
+assert(respStats3.examplesAdded === 1, 'the response example is counted');
+
+const respSnapshot3 = JSON.stringify(respSpec3);
+applyMarkers(respSpec3);
+assert(JSON.stringify(respSpec3) === respSnapshot3, '[response:] is idempotent');
+
+const respSpec2 = {
+  swagger: '2.0',
+  info: { title: 'T', version: '1' },
+  produces: ['application/json'],
+  paths: { '/platnosci': { post: {
+    produces: ['application/xml'],
+    summary: 'Płatność [response: 500 {"error": "X"}] [response: 4XX] [response: default "Błąd ogólny"] [response: 403 Brak uprawnień]',
+    responses: {}
+  } } }
+};
+const respStats2 = applyMarkers(respSpec2);
+const respOp2 = respSpec2.paths['/platnosci'].post;
+assert(respOp2.responses['500'].description === 'Internal Server Error', 'Swagger2: default reason phrase');
+assert(JSON.stringify(respOp2.responses['500'].examples['application/xml']) === '{"error":"X"}',
+  'Swagger2: the example lands in examples under the operation produces type');
+assert(respOp2.responses['default'].description === 'Błąd ogólny', 'the default response works');
+assert(respOp2.responses['403'].description === 'Brak uprawnień', 'an unquoted description is accepted');
+assert(respOp2.responses['4XX'] === undefined, 'Swagger2: a code range is NOT applied');
+assert(/\[response: 4XX\]/.test(respOp2.summary), 'the rejected range marker stays visible in summary');
+assert(respStats2.notApplied.some((n) => n.path === 'POST /platnosci' && /4XX/.test(n.reason)),
+  'the rejected range is reported with the operation label');
+
+const respMixed = {
+  openapi: '3.1.0',
+  info: { title: 'T', version: '1' },
+  paths: { '/x': { get: {
+    description: '[response: 410 Zasób usunięty {"gone": true}] [response: 999] [response: 404 "X" {zepsuty}] [response: 302]',
+    responses: { '302': { $ref: '#/components/responses/Redirect' } }
+  } } },
+  components: { responses: { Redirect: { description: 'Przekierowanie' } } }
+};
+const respStatsMixed = applyMarkers(respMixed);
+const respOpMixed = respMixed.paths['/x'].get;
+assert(respOpMixed.responses['410'].description === 'Zasób usunięty', 'unquoted description followed by JSON: split correctly');
+assert(respOpMixed.responses['410'].content['application/json'].example.gone === true,
+  'the JSON tail after an unquoted description becomes the example');
+assert(respOpMixed.responses['999'] === undefined && /\[response: 999\]/.test(respOpMixed.description),
+  'an invalid status code stays in the description');
+assert(respOpMixed.responses['404'] === undefined && /zepsuty/.test(respOpMixed.description),
+  'broken JSON: the marker is not applied');
+assert(respStatsMixed.notApplied.some((n) => /JSON/.test(n.reason)), 'broken JSON is reported with a reason');
+assert(respOpMixed.responses['302'].$ref === '#/components/responses/Redirect',
+  'a $ref response is untouched and the marker is reported');
+assert(respStatsMixed.notApplied.some((n) => /\$ref/.test(n.reason)), '$ref response reported');
+
+const respSchemaCheck3 = {
+  openapi: '3.0.0',
+  info: { title: 'T', version: '1' },
+  paths: { '/bledy': { get: {
+    description: '[response: 404 {"code": "NOT_FOUND", "detale": {"pole": "id", "literowka": 1}, "zupelnieObce": true}] [response: 409 {"code": "CONFLICT"}]',
+    responses: {
+      '404': { description: 'stary opis', content: { 'application/json': { schema: { $ref: '#/components/schemas/Blad' } } } },
+      '409': { description: 'Konflikt', content: { 'application/json': { schema: { $ref: '#/components/schemas/Blad' } } } }
+    }
+  } } },
+  components: { schemas: {
+    Blad: {
+      type: 'object',
+      properties: {
+        code: { type: 'string' },
+        detale: { type: 'object', properties: { pole: { type: 'string' } } }
+      }
+    }
+  } }
+};
+const schemaCheckStats = applyMarkers(respSchemaCheck3);
+const checkedOp = respSchemaCheck3.paths['/bledy'].get;
+assert(checkedOp.responses['404'].content['application/json'].example.code === 'NOT_FOUND',
+  'the example is applied even when some keys are unknown — like [exampleBody:]');
+assert(schemaCheckStats.unknownKeys.indexOf('GET /bledy 404.zupelnieObce') >= 0,
+  'a key outside the response schema is reported with the operation and code');
+assert(schemaCheckStats.unknownKeys.indexOf('GET /bledy 404.detale.literowka') >= 0,
+  'the check descends into nested objects');
+assert(schemaCheckStats.unknownKeys.indexOf('GET /bledy 404.code') < 0 &&
+  schemaCheckStats.unknownKeys.indexOf('GET /bledy 409.code') < 0,
+  'keys present in the model are not reported');
+assert(checkedOp.responses['404'].content['application/json'].example !== checkedOp.responses['409'].content['application/json'].example,
+  'each code keeps its own example even though both share the Blad schema');
+assert(respSchemaCheck3.components.schemas.Blad.properties.code.example === undefined,
+  'the shared schema stays untouched — per-code examples live on the responses');
+
+const respSchemaCheck2 = {
+  swagger: '2.0', info: { title: 'T', version: '1' },
+  paths: { '/lista': { get: {
+    description: '[response: 400 [{"powod": "X", "obcy": 1}]]',
+    responses: { '400': { description: 'Błąd', schema: { type: 'array', items: { $ref: '#/definitions/Powod' } } } }
+  } } },
+  definitions: { Powod: { type: 'object', properties: { powod: { type: 'string' } } } }
+};
+const schemaCheckStats2 = applyMarkers(respSchemaCheck2);
+assert(JSON.stringify(respSchemaCheck2.paths['/lista'].get.responses['400'].examples['application/json']) ===
+  '[{"powod":"X","obcy":1}]', 'Swagger2: a list example lands in examples');
+assert(schemaCheckStats2.unknownKeys.indexOf('GET /lista 400[].obcy') >= 0,
+  'Swagger2: list items are checked against the item schema');
+assert(schemaCheckStats2.unknownKeys.indexOf('GET /lista 400[].powod') < 0, 'Swagger2: a known item key is fine');
+
+const respBodySpec3 = {
+  openapi: '3.0.0',
+  info: { title: 'T', version: '1' },
+  paths: { '/zamowienia': { post: {
+    description: 'Zamówienie. [response: 404 "Nie znaleziono" #Blad {"code": "NOT_FOUND", "zly": 1}] [response: 409 #/components/schemas/Blad] [response: 410 #Nieistnieje] [response: 422 {"code": "X"}]',
+    responses: { '200': { description: 'OK', content: { 'application/xml': { schema: { type: 'object' } } } } }
+  } } },
+  components: { schemas: { Blad: { type: 'object', properties: { code: { type: 'string' } } } } }
+};
+const respBodyStats3 = applyMarkers(respBodySpec3);
+const respBodyOp3 = respBodySpec3.paths['/zamowienia'].post;
+assert(respBodyOp3.responses['404'].content['application/xml'].schema.$ref === '#/components/schemas/Blad',
+  '3.x: #Blad becomes the body schema, under the media type the operation already uses');
+assert(respBodyOp3.responses['404'].content['application/xml'].example.code === 'NOT_FOUND',
+  'the example sits next to the body schema');
+assert(respBodyStats3.unknownKeys.indexOf('POST /zamowienia 404.zly') >= 0,
+  'the example is checked against the body schema given in the same marker');
+assert(respBodyOp3.responses['404'].description === 'Nie znaleziono', 'description + schema + example in one marker');
+assert(respBodyOp3.responses['409'].content['application/xml'].schema.$ref === '#/components/schemas/Blad',
+  'a full JSON pointer also works, without an example');
+assert(respBodyOp3.responses['409'].description === 'Conflict', 'schema-only marker still gets the reason phrase');
+assert(respBodyOp3.responses['410'] === undefined && /#Nieistnieje/.test(respBodyOp3.description),
+  'a schema that does not exist in the file: the marker stays visible');
+assert(respBodyStats3.notApplied.some((n) => /Nieistnieje/.test(n.reason)), 'and is reported with a reason');
+assert(respBodyOp3.responses['422'].content['application/xml'].schema === undefined,
+  'a marker without # adds no schema — the example stands alone');
+
+const respBodySnapshot3 = JSON.stringify(respBodySpec3);
+applyMarkers(respBodySpec3);
+assert(JSON.stringify(respBodySpec3) === respBodySnapshot3, 'body schema markers are idempotent');
+
+const respBodySpec2 = {
+  swagger: '2.0', info: { title: 'T', version: '1' },
+  paths: { '/zamowienia': { post: {
+    summary: 'Zamówienie [response: 500 Wewnętrzny błąd #Blad {"code": "ERR"}]',
+    responses: {}
+  } } },
+  definitions: { Blad: { type: 'object', properties: { code: { type: 'string' } } } }
+};
+applyMarkers(respBodySpec2);
+const respBodyOp2 = respBodySpec2.paths['/zamowienia'].post;
+assert(respBodyOp2.responses['500'].schema.$ref === '#/definitions/Blad', 'Swagger2: the body schema lands in schema');
+assert(respBodyOp2.responses['500'].description === 'Wewnętrzny błąd',
+  'an unquoted description ends where the #schema token starts');
+assert(JSON.stringify(respBodyOp2.responses['500'].examples['application/json']) === '{"code":"ERR"}',
+  'Swagger2: the example still lands in examples');
+assert(respBodyOp2.summary === 'Zamówienie', 'the marker is removed from summary');
+
+const respOrderSpec = {
+  openapi: '3.1.0', info: { title: 'T', version: '1' },
+  paths: { '/kolejnosc': { get: {
+    description: '[response: 4XX "Klient"] [response: 5XX "Serwer"] [response: default "Domyslna"]',
+    responses: {}
+  } } }
+};
+applyMarkers(respOrderSpec);
+assert(Object.keys(respOrderSpec.paths['/kolejnosc'].get.responses).join() === '4XX,5XX,default',
+  'non-numeric codes keep the order they were written in, not the reverse');
+
+const respNoResponses = {
+  swagger: '2.0', info: { title: 'T', version: '1' },
+  paths: { '/y': { delete: { description: '[response: 204]' } } }
+};
+applyMarkers(respNoResponses);
+assert(respNoResponses.paths['/y'].delete.responses['204'].description === 'No Content',
+  'an operation without a responses object gets one');
+
+const caseSpec = {
+  openapi: '3.0.3', info: { title: 'T', version: '1' },
+  paths: { '/orders': { post: {
+    operationId: 'createOrder',
+    description: 'Zaklada zamowienie.\n' +
+      '[requestCase: minimalny "Case 1 - pola wymagane" {"customerId": "C-1", "items": [{"sku": "S-1"}]}]\n' +
+      '[requestCase: zRabatem {"customerId": "C-1", "couponCode": "X10", "items": [{"sku": "S-1"}]}]\n' +
+      '[responseCase: 200 potwierdzone "Case A" {"orderId": "ORD-1", "status": "CONFIRMED", "literowka": 1}]\n' +
+      '[responseCase: 200 oczekuje "Case B" {"orderId": "ORD-2", "status": "AWAITING_PAYMENT"}]\n' +
+      '[responseCase: 400 brakPola "Case C" {"code": "BAD_REQUEST", "literowka": 1}]',
+    requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/OrderRequest' } } } },
+    responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } } }
+  } } },
+  components: { schemas: {
+    OrderRequest: { type: 'object', properties: { customerId: { type: 'string' }, couponCode: { type: 'string' }, items: { type: 'array', items: { type: 'object', properties: { sku: { type: 'string' } } } } } },
+    Order: { type: 'object', properties: { orderId: { type: 'string' }, status: { type: 'string' } } }
+  } }
+};
+const caseStats = applyMarkers(caseSpec);
+const caseOp = caseSpec.paths['/orders'].post;
+const reqEx = caseOp.requestBody.content['application/json'].examples;
+const okEx = caseOp.responses['200'].content['application/json'].examples;
+assert(Object.keys(reqEx).join() === 'minimalny,zRabatem', 'several named request cases, in the order written');
+assert(reqEx.minimalny.summary === 'Case 1 - pola wymagane', 'a request case keeps its summary');
+assert(reqEx.minimalny.value.customerId === 'C-1', 'a request case keeps its value');
+assert(reqEx.zRabatem.summary === undefined, 'a case without a summary gets only value');
+assert(Object.keys(okEx).join() === 'potwierdzone,oczekuje', 'several named cases under ONE response code');
+assert(okEx.oczekuje.value.status === 'AWAITING_PAYMENT', 'the second case for 200 keeps its own value');
+assert(caseOp.responses['400'].description === 'Bad Request', 'a case creates a missing response with the reason phrase');
+assert(caseStats.unknownKeys.indexOf('POST /orders 200 [potwierdzone].literowka') >= 0,
+  'a case example is checked against the response schema, labelled with the case name');
+assert(caseStats.unknownKeys.indexOf('POST /orders 200 [oczekuje].status') < 0, 'known keys are not reported');
+assert(caseOp.description === 'Zaklada zamowienie.', 'case markers are removed from the description');
+assert(caseStats.examplesAdded === 5, 'every case counts as an example');
+
+const caseSnapshot = JSON.stringify(caseSpec);
+applyMarkers(caseSpec);
+assert(JSON.stringify(caseSpec) === caseSnapshot, 'named cases are idempotent');
+
+const caseSwagger2 = {
+  swagger: '2.0', info: { title: 'T', version: '1' },
+  paths: { '/o': { post: { operationId: 'c',
+    description: 'Op. [responseCase: 200 potwierdzone "Case A" {"a": 1}] [response: 404 "Nie znaleziono"]',
+    responses: {} } } }
+};
+const case2Stats = applyMarkers(caseSwagger2);
+const case2Op = caseSwagger2.paths['/o'].post;
+assert(case2Op.responses['404'] !== undefined && case2Op.responses['200'] === undefined,
+  'Swagger 2.0: [response:] still works, [responseCase:] is not applied');
+assert(/\[responseCase:/.test(case2Op.description), 'Swagger 2.0: the rejected case stays visible in the description');
+assert(case2Stats.notApplied.some((n) => /OpenAPI 3\.x/.test(n.reason)), 'Swagger 2.0: the case is reported with a reason');
+
+const caseConflict = {
+  openapi: '3.0.3', info: { title: 'T', version: '1' },
+  paths: { '/o': { get: { operationId: 'g',
+    description: '[response: 200 "OK" {"a": 1}] [responseCase: 200 przypadek "Case A" {"a": 2}]',
+    responses: {} } } }
+};
+const conflictStats = applyMarkers(caseConflict);
+const conflictMedia = caseConflict.paths['/o'].get.responses['200'].content['application/json'];
+assert(conflictMedia.example === undefined && conflictMedia.examples.przypadek !== undefined,
+  'a named case replaces a single example — 3.x forbids both on one media type');
+assert(conflictStats.notApplied.length === 0,
+  'replacing a single example with cases is normal — it must not raise a warning');
+
+const caseNoBody = {
+  openapi: '3.0.3', info: { title: 'T', version: '1' },
+  paths: { '/o': { get: { operationId: 'g',
+    description: '[requestCase: x "Case" {"a": 1}] [responseCase: 200 y {"b": 2}] [responseCase: 200 {"c": 3}]',
+    responses: {} } } }
+};
+const noBodyStats = applyMarkers(caseNoBody);
+assert(noBodyStats.notApplied.some((n) => /no request body/.test(n.reason)),
+  'a request case on an operation without a body is reported');
+assert(noBodyStats.notApplied.some((n) => /needs a name/.test(n.reason)), 'a case without a name is reported');
+assert(caseNoBody.paths['/o'].get.responses['200'].content['application/json'].examples.y.value.b === 2,
+  'the valid case in the same description is still applied');
+
+const mergeSpec = {
+  openapi: '3.1.0', info: { title: 'T', version: '1' },
+  paths: { '/orders/{id}': { get: { operationId: 'getOrder',
+    description: 'Pobiera zamowienie.\n' +
+      '[response: 404 "Nie znaleziono" #ApiError {"code": "NOT_FOUND"}]\n' +
+      '[response: 400 "Opis z markera"]\n' +
+      '[response: 409 #InnyBlad]\n' +
+      '[responseCase: 500 awaria "Case" {"code": "INTERNAL"}]',
+    responses: {
+      '200': { description: 'OK z generatora',
+               headers: { 'X-Request-Id': { schema: { type: 'string' } } },
+               content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } },
+      '400': { description: 'Stary opis z generatora',
+               headers: { 'X-Id': { schema: { type: 'string' } } },
+               content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+      '409': { description: 'Konflikt z generatora',
+               content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+      '500': { description: 'Blad z generatora',
+               content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } }
+    } } } },
+  components: { schemas: {
+    Order: { type: 'object', properties: { orderId: { type: 'string' } } },
+    ApiError: { type: 'object', properties: { code: { type: 'string' } } },
+    InnyBlad: { type: 'object', properties: { err: { type: 'string' } } }
+  } }
+};
+const before200 = JSON.stringify(mergeSpec.paths['/orders/{id}'].get.responses['200']);
+applyMarkers(mergeSpec);
+const mergeOp = mergeSpec.paths['/orders/{id}'].get;
+
+assert(Object.keys(mergeOp.responses).join() === '200,400,404,409,500',
+  'codes from the generator survive and the marker codes are added alongside');
+assert(JSON.stringify(mergeOp.responses['200']) === before200,
+  'a response no marker mentions is byte-identical afterwards, headers included');
+assert(mergeOp.responses['400'].description === 'Opis z markera',
+  'a description given by the marker replaces the generated one');
+assert(mergeOp.responses['400'].headers['X-Id'] !== undefined &&
+  mergeOp.responses['400'].content['application/json'].schema.$ref === '#/components/schemas/ApiError',
+  'but the headers and the schema the marker did not mention stay');
+assert(mergeOp.responses['409'].description === 'Konflikt z generatora',
+  'a schema-only marker leaves the generated description alone');
+assert(mergeOp.responses['409'].content['application/json'].schema.$ref === '#/components/schemas/InnyBlad',
+  'and swaps only the schema it names');
+assert(mergeOp.responses['500'].description === 'Blad z generatora' &&
+  mergeOp.responses['500'].content['application/json'].examples.awaria !== undefined &&
+  mergeOp.responses['500'].content['application/json'].schema.$ref === '#/components/schemas/ApiError',
+  'a case added to a generated response keeps its description and schema');
+
+const nullableByVersion = (root, host) => {
+  const spec = Object.assign({ info: { title: 'T', version: '1' }, paths: {} }, root,
+    host === 'definitions'
+      ? { definitions: { P: { type: 'object', properties: { a: { type: 'string', description: '[nullable]' } } } } }
+      : { components: { schemas: { P: { type: 'object', properties: { a: { type: 'string', description: '[nullable]' } } } } } });
+  applyMarkers(spec);
+  return (spec.definitions || spec.components.schemas).P.properties.a;
+};
+const nul20 = nullableByVersion({ swagger: '2.0' }, 'definitions');
+assert(nul20['x-nullable'] === true && nul20.nullable === undefined,
+  '[nullable] in 2.0 becomes the x-nullable extension — the 2.0 schema object admits nothing else');
+const nul30 = nullableByVersion({ openapi: '3.0.3' }, 'components');
+assert(nul30.nullable === true && JSON.stringify(nul30.type) === '"string"',
+  '[nullable] in 3.0 sets the nullable keyword and leaves the type alone');
+for (const v of ['3.1.0', '3.2.0']) {
+  const n = nullableByVersion({ openapi: v }, 'components');
+  assert(JSON.stringify(n.type) === '["string","null"]' && n.nullable === undefined,
+    '[nullable] in ' + v + ' states null in the type — the keyword was removed in 3.1');
+}
+const nulNoType = (() => {
+  const spec = { openapi: '3.1.0', info: { title: 'T', version: '1' }, paths: {},
+    components: { schemas: { P: { type: 'object', properties: { a: { description: '[nullable]' } } } } } };
+  applyMarkers(spec);
+  return spec.components.schemas.P.properties.a;
+})();
+assert(nulNoType.type === 'null', '3.1 with no declared type: null becomes the type');
 
 console.log('example-fill-test OK');

@@ -64,10 +64,12 @@ function walkSpec(spec, visit) {
 
 function walkOperations(spec, visit) {
   if (!spec || typeof spec !== 'object') return;
-  for (const item of Object.values(spec.paths || {})) {
+  for (const [route, item] of Object.entries(spec.paths || {})) {
     if (!item || typeof item !== 'object') continue;
     for (const method of HTTP_METHODS) {
-      if (item[method] && typeof item[method] === 'object') visit(item[method]);
+      if (item[method] && typeof item[method] === 'object') {
+        visit(item[method], method.toUpperCase() + ' ' + route);
+      }
     }
   }
 }

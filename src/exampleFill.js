@@ -4,8 +4,21 @@ const {
   scanTags, tidyDescription,
   SCHEMA_TAG_FIELDS, SCHEMA_FIELD_NAMES, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES,
   matchTagField, isArraySchema, fieldFitsNode,
-  coerceValue, coerceTagValue, resolveScalarType
+  coerceValue, coerceTagValue, resolveScalarType,
+  parseResponseMarker, parseCaseMarker, responseReason
 } = require('./markerScanner');
+
+const NULLABLE_REPLACED_BY_TYPE_NULL = 3.1;
+
+function specVersion(spec) {
+  if (!spec || typeof spec !== 'object') return 3.0;
+  if (spec.swagger === '2.0') return 2.0;
+  const v = parseFloat(String(spec.openapi || ''));
+  return isNaN(v) ? 3.0 : v;
+}
+
+const SWAGGER2_SCHEMA_EXTENSION = { nullable: 'x-nullable', deprecated: 'x-deprecated' };
+const NO_SWAGGER2_SCHEMA_FIELD = { writeOnly: true };
 
 function refSiblingsIgnored(spec) {
   if (!spec || typeof spec !== 'object') return false;
@@ -140,6 +153,12 @@ function spreadExample(node, value, host, wrapRefs, stats, path) {
   return any ? accepted : null;
 }
 
+function markNullableType(node) {
+  if (typeof node.type === 'string') node.type = [node.type, 'null'];
+  else if (Array.isArray(node.type)) { if (node.type.indexOf('null') < 0) node.type.push('null'); }
+  else node.type = 'null';
+}
+
 function stripTagSpans(node, text, applied, key) {
   if (!applied.length) return;
   const field = key || 'description';
@@ -150,7 +169,8 @@ function stripTagSpans(node, text, applied, key) {
   else delete node[field];
 }
 
-function applyFieldTags(node, stats, isSwagger2, isSwagger2Param, host, arrayOf, wrapRefs, path) {
+function applyFieldTags(node, stats, version, isSwagger2Param, host, arrayOf, wrapRefs, path) {
+  const isSwagger2 = version < 3;
   const text = String(node.description || '');
   if (text.indexOf('[') < 0) return;
   const applied = [];
@@ -183,10 +203,22 @@ function applyFieldTags(node, stats, isSwagger2, isSwagger2Param, host, arrayOf,
 
     if (!fieldFitsNode(field.name, value, placed.target, host)) continue;
 
-    if (wrapRefs && wrapRefForSiblings(placed.target)) stats.refsWrapped += 1;
     let name = field.name;
+    if (isSwagger2 && NO_SWAGGER2_SCHEMA_FIELD[name]) {
+      stats.notApplied.push({ path: path, reason: name +
+        ' has no field in Swagger 2.0 and no established x- extension — kept in the description' });
+      continue;
+    }
+    if (isSwagger2 && SWAGGER2_SCHEMA_EXTENSION[name]) name = SWAGGER2_SCHEMA_EXTENSION[name];
+
+    if (wrapRefs && wrapRefForSiblings(placed.target)) stats.refsWrapped += 1;
     if (name === 'example' && isSwagger2Param) name = 'x-example';
-    if (name === 'nullable' && isSwagger2) name = 'x-nullable';
+    if (name === 'nullable' && version >= NULLABLE_REPLACED_BY_TYPE_NULL) {
+      if (value === true) markNullableType(placed.target);
+      applied.push(tag);
+      stats.tagFields += 1;
+      continue;
+    }
     placed.target[name] = value;
     applied.push(tag);
     stats.tagFields += 1;
@@ -208,18 +240,181 @@ function rekeyContent(content, mimes) {
   return out;
 }
 
-function applyOperationTags(op, isSwagger2, stats) {
-  for (const key of ['summary', 'description']) applyOperationTagsIn(op, key, isSwagger2, stats);
+function responseExampleMime(op, r) {
+  if (r.content && Object.keys(r.content).length) return Object.keys(r.content)[0];
+  for (const other of Object.values(op.responses || {})) {
+    if (other && typeof other === 'object' && other.content && Object.keys(other.content).length) {
+      return Object.keys(other.content)[0];
+    }
+  }
+  return 'application/json';
 }
 
-function applyOperationTagsIn(op, key, isSwagger2, stats) {
+function reportUnknownExampleKeys(value, schema, host, at, stats) {
+  if (!value || typeof value !== 'object' || !schema) return;
+  if (Array.isArray(value)) {
+    const items = itemsTarget(schema, host);
+    if (!items) return;
+    for (const row of value) reportUnknownExampleKeys(row, items, host, at + '[]', stats);
+    return;
+  }
+  const target = objectTarget(schema, host);
+  if (!target) return;
+  for (const [key, val] of Object.entries(value)) {
+    const prop = target.properties[key];
+    if (!prop) { stats.unknownKeys.push(at + '.' + key); continue; }
+    reportUnknownExampleKeys(val, prop, host, at + '.' + key, stats);
+  }
+}
+
+function applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats, host, label) {
+  if (isSwagger2 && /XX$/.test(parsed.code)) {
+    return 'the ' + parsed.code + ' code range needs OpenAPI 3.x — Swagger 2.0 accepts only exact codes';
+  }
+  if (parsed.ref && !(host && host[parsed.ref])) {
+    return 'the body schema ' + parsed.ref + ' does not exist in the file';
+  }
+  if (!op.responses || typeof op.responses !== 'object') op.responses = {};
+  let r = op.responses[parsed.code];
+  if (r && typeof r === 'object' && r.$ref) {
+    return 'response ' + parsed.code + ' is a $ref reference — edit the shared response instead';
+  }
+  if (!r || typeof r !== 'object') {
+    r = { description: parsed.description || responseReason(parsed.code) };
+    op.responses[parsed.code] = r;
+    stats.responsesAdded += 1;
+  } else if (parsed.description) {
+    r.description = parsed.description;
+  }
+  if (parsed.ref === undefined && parsed.example === undefined) return null;
+  let schema;
+  if (isSwagger2) {
+    if (parsed.ref) r.schema = { $ref: '#/definitions/' + parsed.ref };
+    schema = r.schema;
+    if (parsed.example !== undefined) {
+      const mime = (op.produces && op.produces[0]) || (rootProduces && rootProduces[0]) || 'application/json';
+      if (!r.examples || typeof r.examples !== 'object') r.examples = {};
+      r.examples[mime] = parsed.example;
+    }
+  } else {
+    const mime = responseExampleMime(op, r);
+    if (!r.content || typeof r.content !== 'object') r.content = {};
+    if (!r.content[mime] || typeof r.content[mime] !== 'object') r.content[mime] = {};
+    if (parsed.ref) r.content[mime].schema = { $ref: '#/components/schemas/' + parsed.ref };
+    schema = r.content[mime].schema;
+    if (parsed.example !== undefined) r.content[mime].example = parsed.example;
+  }
+  if (parsed.example !== undefined) {
+    stats.examplesAdded += 1;
+    reportUnknownExampleKeys(parsed.example, schema, host, (label ? label + ' ' : '') + parsed.code, stats);
+  }
+  return null;
+}
+
+function applyOperationTags(op, isSwagger2, stats, rootProduces, label, host) {
+  for (const key of ['summary', 'description']) {
+    applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label, host);
+  }
+}
+
+function requestExampleMime(op) {
+  const content = op.requestBody && op.requestBody.content;
+  const keys = content ? Object.keys(content) : [];
+  return keys.length ? keys[0] : 'application/json';
+}
+
+function mediaEntry(holder, mime) {
+  if (!holder.content || typeof holder.content !== 'object') holder.content = {};
+  if (!holder.content[mime] || typeof holder.content[mime] !== 'object') holder.content[mime] = {};
+  return holder.content[mime];
+}
+
+function caseMediaType(op, parsed, isResponse, stats) {
+  if (!isResponse) {
+    if (!op.requestBody || typeof op.requestBody !== 'object') {
+      return { error: 'the operation has no request body' };
+    }
+    if (op.requestBody.$ref) return { error: 'the request body is a $ref reference — edit the shared body instead' };
+    return { media: mediaEntry(op.requestBody, requestExampleMime(op)), at: 'request' };
+  }
+  if (!op.responses || typeof op.responses !== 'object') op.responses = {};
+  let r = op.responses[parsed.code];
+  if (r && typeof r === 'object' && r.$ref) {
+    return { error: 'response ' + parsed.code + ' is a $ref reference — edit the shared response instead' };
+  }
+  if (!r || typeof r !== 'object') {
+    r = { description: responseReason(parsed.code) };
+    op.responses[parsed.code] = r;
+    stats.responsesAdded += 1;
+  }
+  return { media: mediaEntry(r, responseExampleMime(op, r)), at: parsed.code };
+}
+
+function applyCaseMarker(op, parsed, isResponse, isSwagger2, stats, host, label) {
+  if (isSwagger2) {
+    return 'named example cases need OpenAPI 3.x — Swagger 2.0 allows only one example per media type';
+  }
+  const spot = caseMediaType(op, parsed, isResponse, stats);
+  if (spot.error) return spot.error;
+  const media = spot.media;
+
+  if (!media.examples || typeof media.examples !== 'object') media.examples = {};
+  delete media.example;
+  const entry = {};
+  if (parsed.summary) entry.summary = parsed.summary;
+  entry.value = parsed.value;
+  media.examples[parsed.name] = entry;
+  stats.examplesAdded += 1;
+  reportUnknownExampleKeys(parsed.value, media.schema, host,
+    (label ? label + ' ' : '') + spot.at + ' [' + parsed.name + ']', stats);
+  return null;
+}
+
+function recordOutcome(problem, tag, done, stats, label) {
+  if (problem) stats.notApplied.push({ path: label || 'operation', reason: problem });
+  else done.add(tag);
+}
+
+function applyResponseTags(op, tags, isSwagger2, stats, rootProduces, label, host) {
+  const done = new Set();
+  const named = (tag, key) => String(tag.key).toLowerCase() === key;
+
+  for (const tag of tags.filter((t) => named(t, 'response'))) {
+    const parsed = parseResponseMarker(tag.raw);
+    recordOutcome(parsed.error || applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats, host, label),
+      tag, done, stats, label);
+  }
+  for (const tag of tags.filter((t) => named(t, 'requestcase') || named(t, 'responsecase'))) {
+    const isResponse = named(tag, 'responsecase');
+    const parsed = parseCaseMarker(tag.raw, isResponse);
+    recordOutcome(parsed.error || applyCaseMarker(op, parsed, isResponse, isSwagger2, stats, host, label),
+      tag, done, stats, label);
+  }
+  return done;
+}
+
+function applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label, host) {
   const text = String(op[key] || '');
   if (text.indexOf('[') < 0) return;
+  const tags = scanTags(text);
+  const isResponse = (tag) => {
+    const field = matchTagField(tag.key, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES);
+    return field && (field.kind === 'response' || field.kind === 'case');
+  };
+
+  const responsesDone = applyResponseTags(op, tags.filter(isResponse), isSwagger2, stats, rootProduces, label, host);
+
   const applied = [];
   const assignedHere = [];
-  for (const tag of scanTags(text).reverse()) {
+  for (const tag of tags.reverse()) {
     const field = matchTagField(tag.key, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES);
     if (!field) continue;
+    if (field.kind === 'response' || field.kind === 'case') {
+      if (!responsesDone.has(tag)) continue;
+      applied.push(tag);
+      stats.tagFields += 1;
+      continue;
+    }
     const value = coerceTagValue(field.kind, tag.raw, op);
     if (value === undefined) continue;
     if (field.name === 'consumes' || field.name === 'produces') {
@@ -275,7 +470,11 @@ function stripDescriptionTags(description) {
 }
 
 function newStats() {
-  return { examplesAdded: 0, defaultsAdded: 0, fromTags: 0, mediaSet: 0, tagFields: 0, refsWrapped: 0, mismatched: [], unknownKeys: [], notApplied: [] };
+  return {
+    examplesAdded: 0, defaultsAdded: 0, fromTags: 0, mediaSet: 0,
+    tagFields: 0, refsWrapped: 0, responsesAdded: 0,
+    mismatched: [], unknownKeys: [], notApplied: []
+  };
 }
 
 function checkPatternAgainstExample(node, path, stats) {
@@ -294,10 +493,11 @@ function applyMarkers(spec) {
   if (!spec || typeof spec !== 'object') return stats;
   const isSwagger2 = spec.swagger === '2.0';
   const host = schemaHost(spec);
-  walkOperations(spec, (op) => applyOperationTags(op, isSwagger2, stats));
+  walkOperations(spec, (op, label) => applyOperationTags(op, isSwagger2, stats, spec.produces, label, host));
   const wrapRefs = refSiblingsIgnored(spec);
+  const version = specVersion(spec);
   walkSpec(spec, (node, path, exampleKey, arrayOf) => {
-    applyFieldTags(node, stats, isSwagger2, exampleKey === 'x-example', host, arrayOf, wrapRefs, path);
+    applyFieldTags(node, stats, version, exampleKey === 'x-example', host, arrayOf, wrapRefs, path);
 
     checkPatternAgainstExample(node, path, stats);
   });

@@ -24,6 +24,11 @@ This file lists user-visible changes to OpenAPI Converter. The project follows
 
 ### Changed
 
+- `[nullable]` now follows the version of the file. Swagger 2.0 still gets
+  `x-nullable` and OpenAPI 3.0 the `nullable` keyword, but OpenAPI 3.1 and 3.2
+  state it in the type — `type: string` becomes `type: [string, null]` —
+  because 3.1 removed the keyword. The extension previously wrote `nullable`
+  there, where those versions ignore it.
 - **Convert Version** now applies the markers to the converted file instead of
   to the source, so each marker follows the version you convert to. Converting
   a Swagger 2.0 file upwards applies the markers the newer version has gained,

@@ -32,8 +32,9 @@ const field = (spec) => (spec.definitions || spec.components.schemas).P.properti
     '1: upgrade applies the 3.x-only named case');
   assert(desc(openapi) === 'Op.', '1: nothing is left in the description');
   assert(stats.notApplied.length === 0, '1: nothing is reported as unapplied');
-  assert(field(openapi).nullable === true && field(openapi)['x-nullable'] === undefined,
-    '1: field markers use the TARGET semantics — nullable, not x-nullable');
+  assert(JSON.stringify(field(openapi).type) === '["string","null"]' &&
+    field(openapi).nullable === undefined && field(openapi)['x-nullable'] === undefined,
+    '1: field markers use the TARGET semantics — 3.1 states null in the type, it has no nullable keyword');
 
   // 2. Najpierw znaczniki na 2.0, potem konwersja — reszta wchodzi przy konwersji.
   const stepOne = source20();

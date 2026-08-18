@@ -1087,4 +1087,33 @@ assert(mergeOp.responses['500'].description === 'Blad z generatora' &&
   mergeOp.responses['500'].content['application/json'].schema.$ref === '#/components/schemas/ApiError',
   'a case added to a generated response keeps its description and schema');
 
+// [nullable] wyglada inaczej w kazdej linii wersji: 2.0 nie ma tego pola,
+// 3.0 ma slowo kluczowe, a 3.1 je usunelo na rzecz tablicy typow.
+const nullableByVersion = (root, host) => {
+  const spec = Object.assign({ info: { title: 'T', version: '1' }, paths: {} }, root,
+    host === 'definitions'
+      ? { definitions: { P: { type: 'object', properties: { a: { type: 'string', description: '[nullable]' } } } } }
+      : { components: { schemas: { P: { type: 'object', properties: { a: { type: 'string', description: '[nullable]' } } } } } });
+  applyMarkers(spec);
+  return (spec.definitions || spec.components.schemas).P.properties.a;
+};
+const nul20 = nullableByVersion({ swagger: '2.0' }, 'definitions');
+assert(nul20['x-nullable'] === true && nul20.nullable === undefined,
+  '[nullable] in 2.0 becomes the x-nullable extension — the 2.0 schema object admits nothing else');
+const nul30 = nullableByVersion({ openapi: '3.0.3' }, 'components');
+assert(nul30.nullable === true && JSON.stringify(nul30.type) === '"string"',
+  '[nullable] in 3.0 sets the nullable keyword and leaves the type alone');
+for (const v of ['3.1.0', '3.2.0']) {
+  const n = nullableByVersion({ openapi: v }, 'components');
+  assert(JSON.stringify(n.type) === '["string","null"]' && n.nullable === undefined,
+    '[nullable] in ' + v + ' states null in the type — the keyword was removed in 3.1');
+}
+const nulNoType = (() => {
+  const spec = { openapi: '3.1.0', info: { title: 'T', version: '1' }, paths: {},
+    components: { schemas: { P: { type: 'object', properties: { a: { description: '[nullable]' } } } } } };
+  applyMarkers(spec);
+  return spec.components.schemas.P.properties.a;
+})();
+assert(nulNoType.type === 'null', '3.1 with no declared type: null becomes the type');
+
 console.log('example-fill-test OK');

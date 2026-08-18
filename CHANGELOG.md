@@ -22,6 +22,16 @@ This file lists user-visible changes to OpenAPI Converter. The project follows
   only; in Swagger 2.0 the marker stays in the description and is reported,
   because 2.0 allows a single example per media type.
 
+### Changed
+
+- **Convert Version** now applies the markers to the converted file instead of
+  to the source, so each marker follows the version you convert to. Converting
+  a Swagger 2.0 file upwards applies the markers the newer version has gained,
+  such as code ranges and named cases, in a single step. Converting downwards
+  applies what the older version still supports and leaves the rest in the
+  descriptions. Previously the source version decided, so a marker the target
+  supported was dropped and its text was carried into the converted file.
+
 ### Fixed
 
 - **Convert Version** now names the result document after the target format, so

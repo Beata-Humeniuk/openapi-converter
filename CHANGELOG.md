@@ -14,6 +14,11 @@ This file lists user-visible changes to OpenAPI Converter. The project follows
   response has a schema, the example keys are checked against it and unknown
   keys are reported, the same way `[exampleBody:]` reports them.
 
+### Fixed
+
+- **Apply Markers** no longer adds a trailing empty line to a file that did
+  not end with one.
+
 ## [1.0.0] - 2026-08-17
 
 First public release.

@@ -100,6 +100,7 @@ async function applyMarkersCommand(uri) {
   await applySpecToSource(source, spec);
   const parts = [];
   if (stats.tagFields + stats.mediaSet) parts.push('applied ' + (stats.tagFields + stats.mediaSet) + ' markers');
+  if (stats.responsesAdded) parts.push('added ' + stats.responsesAdded + ' responses');
   if (stats.examplesAdded) parts.push('set ' + stats.examplesAdded + ' examples');
 
   if (stats.refsWrapped) {
@@ -110,7 +111,7 @@ async function applyMarkersCommand(uri) {
     const notes = [];
     if (stats.mismatched.length) notes.push(stats.mismatched.length + ' fields: example does not match the pattern.');
     if (stats.unknownKeys.length) notes.push(stats.unknownKeys.length + ' keys in [exampleBody:] not found in the model.');
-    if (stats.notApplied.length) notes.push(stats.notApplied.length + ' [exampleBody:] markers not applied.');
+    if (stats.notApplied.length) notes.push(stats.notApplied.length + ' markers not applied.');
     const pick = await vscode.window.showWarningMessage(message + ' ' + notes.join(' '), 'Show fields');
     if (pick === 'Show fields') {
       const sections = [];
@@ -128,7 +129,7 @@ async function applyMarkersCommand(uri) {
           stats.unknownKeys.map((s) => '- ' + s).join('\n'));
       }
       if (stats.notApplied.length) {
-        sections.push('# [exampleBody:] markers not applied\n\n' +
+        sections.push('# Markers not applied\n\n' +
           stats.notApplied.map((s) => '- ' + s.path + ' — ' + s.reason).join('\n'));
       }
       const listDoc = await vscode.workspace.openTextDocument({

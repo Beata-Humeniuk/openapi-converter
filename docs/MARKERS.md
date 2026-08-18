@@ -144,6 +144,21 @@ responses:
     description: Service Unavailable
 ```
 
+In Swagger 2.0 the same markers produce the 2.0 layout — the body schema goes
+to `schema` and the example to `examples`, under the first `produces` type:
+
+```yaml
+responses:
+  '201':
+    description: Payment created
+    schema:
+      $ref: '#/definitions/Payment'
+    examples:
+      application/json:
+        id: PAY-001
+        status: NEW
+```
+
 Value rules:
 
 - The status code is `100`–`599`, a range such as `4XX` (OpenAPI 3.x only),
@@ -165,9 +180,13 @@ Value rules:
   unknown keys are listed after the command finishes, the same way
   [`exampleBody`](#examplebody) reports them. The shared schema itself is not
   changed, so each response code keeps its own example.
-- If the response code already exists, the marker updates its description and
-  example, and everything else stays untouched. A response that is a `$ref`
-  reference is not changed.
+- If the response code already exists, the marker updates only the parts it
+  gives — description, body schema, or example — and everything else stays
+  untouched. A response that is a `$ref` reference is not changed.
+- A marker that cannot be applied — an invalid code, broken JSON, an unknown
+  schema name, a code range in Swagger 2.0 — stays in the description and is
+  listed after the command finishes, with the operation and the reason, for
+  example `POST /payments — the body schema Eror does not exist in the file`.
 
 ## `exampleBody`
 

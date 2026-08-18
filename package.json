@@ -84,7 +84,7 @@
   "scripts": {
     "build": "esbuild src/extension.js --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --minify --alias:node-fetch=./src/no-network-stub.js --alias:node-fetch-h2=./src/no-network-stub.js",
     "vscode:prepublish": "npm run build",
-    "test": "node test/convert-test.js && node test/example-fill-test.js && node test/markers-golden-test.js",
+    "test": "node test/convert-test.js && node test/example-fill-test.js && node test/markers-golden-test.js && node test/convert-markers-test.js",
     "package": "vsce package --no-dependencies",
     "demo:reset": "node -e \"require('fs').copyFileSync('test/markers-swagger2.input.json','examples/markers-swagger2.json')\" && echo examples/markers-swagger2.json restored"
   },

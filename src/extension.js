@@ -47,19 +47,27 @@ async function pickFormat(placeHolder) {
   return format ? format.label === 'YAML' : null;
 }
 
-async function showResult(content, isYaml) {
-  const doc = await vscode.workspace.openTextDocument({
-    language: isYaml ? 'yaml' : 'json',
-    content
-  });
+function resultName(source, isYaml) {
+  const named = source && source.uri && source.uri.scheme === 'file';
+  const base = named
+    ? path.basename(source.uri.fsPath).replace(/\.(json|yaml|yml|md)$/i, '')
+    : 'openapi';
+  return base + '.' + (isYaml ? 'yaml' : 'json');
+}
+
+async function showResult(content, isYaml, source) {
+  const uri = vscode.Uri.from({ scheme: 'untitled', path: resultName(source, isYaml) });
+  const doc = await vscode.workspace.openTextDocument(uri);
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(doc.uri, new vscode.Range(0, 0, doc.lineCount + 1, 0), content);
+  await vscode.workspace.applyEdit(edit);
   await vscode.window.showTextDocument(doc, { preview: false });
 }
 
 async function offerSaveBeside(source, content, isYaml, message) {
   if (!source.uri || source.uri.scheme !== 'file') return;
   const src = source.uri.fsPath;
-  const base = path.basename(src).replace(/\.(json|yaml|yml|md)$/i, '');
-  const target = path.join(path.dirname(src), base + '.' + (isYaml ? 'yaml' : 'json'));
+  const target = path.join(path.dirname(src), resultName(source, isYaml));
   const pick = await vscode.window.showInformationMessage(message + ' Save the result?', 'Save As');
   if (pick !== 'Save As') return;
   const uri = await vscode.window.showSaveDialog({
@@ -100,6 +108,7 @@ async function applyMarkersCommand(uri) {
   await applySpecToSource(source, spec);
   const parts = [];
   if (stats.tagFields + stats.mediaSet) parts.push('applied ' + (stats.tagFields + stats.mediaSet) + ' markers');
+  if (stats.responsesAdded) parts.push('added ' + stats.responsesAdded + ' responses');
   if (stats.examplesAdded) parts.push('set ' + stats.examplesAdded + ' examples');
 
   if (stats.refsWrapped) {
@@ -109,8 +118,8 @@ async function applyMarkersCommand(uri) {
   if (stats.mismatched.length || stats.unknownKeys.length || stats.notApplied.length) {
     const notes = [];
     if (stats.mismatched.length) notes.push(stats.mismatched.length + ' fields: example does not match the pattern.');
-    if (stats.unknownKeys.length) notes.push(stats.unknownKeys.length + ' keys in [exampleBody:] not found in the model.');
-    if (stats.notApplied.length) notes.push(stats.notApplied.length + ' [exampleBody:] markers not applied.');
+    if (stats.unknownKeys.length) notes.push(stats.unknownKeys.length + ' example keys not found in the model.');
+    if (stats.notApplied.length) notes.push(stats.notApplied.length + ' markers not applied.');
     const pick = await vscode.window.showWarningMessage(message + ' ' + notes.join(' '), 'Show fields');
     if (pick === 'Show fields') {
       const sections = [];
@@ -122,13 +131,13 @@ async function applyMarkersCommand(uri) {
           stats.mismatched.map((s) => '- ' + s).join('\n'));
       }
       if (stats.unknownKeys.length) {
-        sections.push('# Keys from [exampleBody:] not found in the model\n\n' +
+        sections.push('# Example keys not found in the model\n\n' +
           'They were not inserted — usually a typo in the field name,\n' +
           'or a field the model does not know.\n\n' +
           stats.unknownKeys.map((s) => '- ' + s).join('\n'));
       }
       if (stats.notApplied.length) {
-        sections.push('# [exampleBody:] markers not applied\n\n' +
+        sections.push('# Markers not applied\n\n' +
           stats.notApplied.map((s) => '- ' + s.path + ' — ' + s.reason).join('\n'));
       }
       const listDoc = await vscode.workspace.openTextDocument({
@@ -145,7 +154,8 @@ async function applyMarkersCommand(uri) {
 async function applySpecToSource(source, spec) {
   const doc = await vscode.workspace.openTextDocument(source.uri);
   const isYaml = !/^\s*\{/.test(source.text);
-  const newText = serialize(spec, isYaml);
+  let newText = serialize(spec, isYaml);
+  if (!/\n$/.test(source.text)) newText = newText.replace(/\n$/, '');
   const edit = new vscode.WorkspaceEdit();
   edit.replace(doc.uri, new vscode.Range(0, 0, doc.lineCount + 1, 0), newText);
   await vscode.workspace.applyEdit(edit);
@@ -175,7 +185,7 @@ async function convertCommand(uri) {
     const isYaml = await pickFormat('This is not a Swagger/OpenAPI specification.');
     if (isYaml === null) return;
     const content = serialize(spec, isYaml);
-    await showResult(content, isYaml);
+    await showResult(content, isYaml, source);
     await offerSaveBeside(source, content, isYaml, 'Format converted successfully.');
     return;
   }
@@ -214,8 +224,6 @@ async function convertCommand(uri) {
   const isYaml = await pickFormat('Format');
   if (isYaml === null) return;
 
-  const tagStats = liftDescriptionTags(spec);
-
   let openapi, warnings;
   try {
     ({ openapi, warnings } = await convertSpec(spec, targetPick.target));
@@ -223,6 +231,8 @@ async function convertCommand(uri) {
     vscode.window.showErrorMessage('Conversion failed: ' + (e.message || String(e)));
     return;
   }
+
+  const tagStats = liftDescriptionTags(openapi);
 
   if (warnings && warnings.length) {
     const pick = await vscode.window.showWarningMessage(
@@ -239,10 +249,13 @@ async function convertCommand(uri) {
   }
 
   const content = serialize(canonicalOrder(openapi), isYaml);
-  await showResult(content, isYaml);
+  await showResult(content, isYaml, source);
   const lifted = tagStats.tagFields + tagStats.mediaSet;
-  await offerSaveBeside(source, content, isYaml, 'Converted ' + fromLabel + ' → ' + targetPick.label + '.' +
-    (lifted ? ' Moved ' + lifted + ' marker values into OpenAPI fields.' : ''));
+  const kept = tagStats.notApplied.length;
+  const summary = ['Converted ' + fromLabel + ' → ' + targetPick.label + '.'];
+  if (lifted) summary.push('Moved ' + lifted + ' marker values into OpenAPI fields.');
+  if (kept) summary.push(kept + ' markers stayed in the descriptions — ' + targetPick.label + ' does not support them.');
+  await offerSaveBeside(source, content, isYaml, summary.join(' '));
 }
 
 function activate(context) {

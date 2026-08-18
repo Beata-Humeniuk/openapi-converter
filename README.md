@@ -53,13 +53,37 @@ requestNumber:
   example: RQ/2026/000123
 ```
 
-Unsupported markers, such as `[TODO: ...]`, remain unchanged. Invalid values
-are not applied. Running the command again does not change an already processed
-file.
+Markers also work at the operation level. `[response:]` adds a status code with
+its description, body schema, and example, and `[responseCase:]` /
+`[requestCase:]` add several named example cases to one code or to the request
+body, which Swagger UI shows in a dropdown:
 
-**OpenAPI: Convert Version** applies supported markers before converting the
-file. See the [marker reference](docs/MARKERS.md) for all supported markers and
-value rules. A complete example is available in
+```text
+Creates an order.
+[response: 404 "Order not found" #ApiError {"code": "NOT_FOUND"}]
+[responseCase: 200 confirmed "Confirmed straight away" {"orderId": "ORD-1"}]
+[responseCase: 200 awaitingPayment "Waiting for payment" {"orderId": "ORD-2"}]
+```
+
+Markers add to what the file already has: status codes that came from a
+generator stay as they are, and a marker naming an existing code changes only
+the parts it gives.
+
+Unsupported markers, such as `[TODO: ...]`, remain unchanged. Invalid values
+are not applied — the marker stays visible in the description, and the
+extension lists what it could not apply, which example keys are missing from
+the model, and which examples contradict their pattern. Running the command
+again does not change an already processed file.
+
+**OpenAPI: Convert Version** applies the markers to the converted file, so each
+marker is judged by the version you convert to. Converting a Swagger 2.0 file
+upwards applies the markers the newer version has gained — named cases and code
+ranges included — in one step, with no second command to run. Converting
+downwards applies what the older version still supports and leaves the rest in
+the descriptions, listed after the command finishes.
+
+See the [marker reference](docs/MARKERS.md) for all supported markers and value
+rules. A complete example is available in
 [examples/markers-swagger2.json](examples/markers-swagger2.json).
 
 ## Privacy and security

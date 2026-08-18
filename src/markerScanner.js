@@ -84,9 +84,99 @@ const OPERATION_TAG_FIELDS = {
   tags: 'stringList',
   consumes: 'stringList',
   produces: 'stringList',
-  deprecated: 'flag'
+  deprecated: 'flag',
+  response: 'response',
+  requestcase: 'case',
+  responsecase: 'case'
 };
 const OPERATION_FIELD_NAMES = { operationid: 'operationId' };
+
+const RESPONSE_REASONS = {
+  '1XX': 'Informational', '2XX': 'Success', '3XX': 'Redirection',
+  '4XX': 'Client error', '5XX': 'Server error', 'default': 'Default response',
+  100: 'Continue', 101: 'Switching Protocols',
+  200: 'OK', 201: 'Created', 202: 'Accepted', 204: 'No Content', 206: 'Partial Content',
+  301: 'Moved Permanently', 302: 'Found', 303: 'See Other', 304: 'Not Modified',
+  307: 'Temporary Redirect', 308: 'Permanent Redirect',
+  400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found',
+  405: 'Method Not Allowed', 406: 'Not Acceptable', 408: 'Request Timeout',
+  409: 'Conflict', 410: 'Gone', 412: 'Precondition Failed', 415: 'Unsupported Media Type',
+  422: 'Unprocessable Entity', 423: 'Locked', 429: 'Too Many Requests',
+  500: 'Internal Server Error', 501: 'Not Implemented', 502: 'Bad Gateway',
+  503: 'Service Unavailable', 504: 'Gateway Timeout'
+};
+
+function responseReason(code) {
+  return RESPONSE_REASONS[code] || 'Response ' + code;
+}
+
+function normalizeResponseCode(token) {
+  const t = String(token).trim();
+  if (/^default$/i.test(t)) return 'default';
+  if (/^[1-5]xx$/i.test(t)) return t[0] + 'XX';
+  if (/^[1-5]\d\d$/.test(t)) return t;
+  return null;
+}
+
+function quotedSpan(s) {
+  let i = 1;
+  while (i < s.length) {
+    if (s[i] === '\\') { i += 2; continue; }
+    if (s[i] === '"') return i + 1;
+    i += 1;
+  }
+  return 0;
+}
+
+function jsonTailStart(s) {
+  const brace = s.indexOf('{');
+  const bracket = s.indexOf('[');
+  const i = brace < 0 ? bracket : (bracket < 0 ? brace : Math.min(brace, bracket));
+  if (i < 0) return s.length;
+  try { JSON.parse(s.slice(i)); return i; } catch (e) { return s.length; }
+}
+
+function normalizeSchemaRef(token) {
+  const m = String(token).match(/^#(?:\/(?:definitions|components\/schemas)\/)?([^/\s]+)$/);
+  return m ? m[1] : null;
+}
+
+function parseResponseMarker(raw) {
+  const text = String(raw === undefined ? '' : raw).trim();
+  const m = text.match(/^(\S+)\s*/);
+  const code = m && normalizeResponseCode(m[1]);
+  if (!code) return { error: 'the value must start with a status code — 100-599, a range such as 4XX, or default' };
+  let rest = text.slice(m[0].length).trim();
+  let description;
+  if (rest[0] === '"') {
+    const span = quotedSpan(rest);
+    if (span) {
+      description = unquote(rest.slice(0, span));
+      rest = rest.slice(span).trim();
+    } else {
+      description = rest;
+      rest = '';
+    }
+  } else if (rest && rest[0] !== '{' && rest[0] !== '[' && rest[0] !== '#') {
+    const hash = rest.search(/\s#/);
+    const cut = Math.min(jsonTailStart(rest), hash < 0 ? rest.length : hash);
+    description = rest.slice(0, cut).trim();
+    rest = rest.slice(cut).trim();
+  }
+  let ref;
+  if (rest[0] === '#') {
+    const token = rest.match(/^(\S+)\s*/);
+    ref = normalizeSchemaRef(token[1]);
+    if (!ref) return { error: 'the body schema must look like #Name or #/components/schemas/Name' };
+    rest = rest.slice(token[0].length).trim();
+  }
+  let example;
+  if (rest) {
+    try { example = JSON.parse(rest); }
+    catch (e) { return { error: 'the example after the code is not valid JSON' }; }
+  }
+  return { code: code, description: description, ref: ref, example: example };
+}
 
 const FIELD_APPLIES_TO = {
   pattern: 'string', minLength: 'string', maxLength: 'string',
@@ -250,9 +340,48 @@ function coerceTagValue(kind, raw, node, host) {
   }
 }
 
+function parseCaseMarker(raw, withCode) {
+  const text = String(raw === undefined ? '' : raw).trim();
+  let rest = text;
+  let code;
+  if (withCode) {
+    const m = rest.match(/^(\S+)\s*/);
+    code = m && normalizeResponseCode(m[1]);
+    if (!code) return { error: 'the value must start with a status code — 100-599, a range such as 4XX, or default' };
+    rest = rest.slice(m[0].length).trim();
+  }
+  const n = rest.match(/^([A-Za-z][A-Za-z0-9_-]*)\s*/);
+  if (!n) {
+    const sample = withCode ? 'responseCase: 200 ' : 'requestCase: ';
+    return { error: 'the case needs a name, for example [' + sample + 'confirmed {...}]' };
+  }
+  const name = n[1];
+  rest = rest.slice(n[0].length).trim();
+
+  let summary;
+  if (rest[0] === '"') {
+    const span = quotedSpan(rest);
+    if (span) {
+      summary = unquote(rest.slice(0, span));
+      rest = rest.slice(span).trim();
+    }
+  } else if (rest && rest[0] !== '{' && rest[0] !== '[') {
+    const cut = jsonTailStart(rest);
+    summary = rest.slice(0, cut).trim();
+    rest = rest.slice(cut).trim();
+  }
+
+  if (!rest) return { error: 'the case ' + name + ' has no example — add a JSON object or list' };
+  let value;
+  try { value = JSON.parse(rest); }
+  catch (e) { return { error: 'the example for case ' + name + ' is not valid JSON' }; }
+  return { code: code, name: name, summary: summary, value: value };
+}
+
 module.exports = {
   scanTags, tidyDescription,
   SCHEMA_TAG_FIELDS, SCHEMA_FIELD_NAMES, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES,
   matchTagField, isArraySchema, fieldFitsNode,
-  coerceValue, coerceTagValue, resolveScalarType
+  coerceValue, coerceTagValue, resolveScalarType,
+  parseResponseMarker, parseCaseMarker, responseReason
 };

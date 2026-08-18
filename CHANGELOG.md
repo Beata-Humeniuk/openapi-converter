@@ -17,6 +17,10 @@ This file lists user-visible changes to OpenAPI Converter. The project follows
 
 ### Fixed
 
+- **Convert Version** now names the result document after the target format, so
+  saving it with Ctrl+S proposes `.yaml` instead of `.yml`. An unnamed document
+  left the extension to VS Code, which takes the first one registered for the
+  language — a YAML extension such as Red Hat YAML registers `.yml` there.
 - **Apply Markers** no longer adds a trailing empty line to a file that did
   not end with one.
 

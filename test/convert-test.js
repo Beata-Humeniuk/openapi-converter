@@ -273,11 +273,25 @@ const assert = (cond, msg) => { if (!cond) { console.error('FAIL: ' + msg); proc
   assert(woProps.haslo.description === 'Hasło do ustawienia.\n[writeOnly]', 'writeOnly appended as a tag under the existing description');
   assert(woProps.bezOpisu.description === '[writeOnly]', 'writeOnly as a tag also when there was no description before');
   assert(woWarnings.some((w) => w.includes('kept as a [writeOnly] tag')), 'the warning speaks of keeping, not of losing');
+  // Swagger 2.0 has no writeOnly and no established x- extension for it, so the
+  // tag stays put: Apply Markers on the 2.0 file leaves it alone and says why.
   const woLift = require('../src/exampleFill').liftDescriptionTags(woDown);
-  assert(woProps.haslo.writeOnly === true && woProps.bezOpisu.writeOnly === true,
-    'Apply Markers (liftDescriptionTags) recovers writeOnly from the tag after a lossy conversion');
-  assert(woProps.haslo.description === 'Hasło do ustawienia.', 'tag stripped from the description after recovery — the original description comes back clean');
-  assert(woLift.tagFields === 2, 'counter: both fields recovered from tags');
+  assert(woProps.haslo.writeOnly === undefined && woProps.bezOpisu.writeOnly === undefined,
+    'Apply Markers on the 2.0 file does not write writeOnly — 2.0 has no such field');
+  assert(woProps.haslo.description === 'Hasło do ustawienia.\n[writeOnly]' && woProps.bezOpisu.description === '[writeOnly]',
+    'the tag stays in the description, ready for a conversion back up');
+  assert(woLift.notApplied.some((n) => /writeOnly/.test(n.reason)), 'and the reason is reported');
+
+  // The recovery happens where the field exists: converting the 2.0 file back
+  // up and applying the markers to the result restores writeOnly.
+  const { openapi: woUp } = await convertSpec(JSON.parse(JSON.stringify(woDown)), '3.0.3');
+  const woUpLift = require('../src/exampleFill').liftDescriptionTags(woUp);
+  const woUpProps = woUp.components.schemas.W.properties;
+  assert(woUpProps.haslo.writeOnly === true && woUpProps.bezOpisu.writeOnly === true,
+    '2.0 -> 3.0: the [writeOnly] tag becomes the field again — the round trip is closed');
+  assert(woUpProps.haslo.description === 'Hasło do ustawienia.' && woUpProps.bezOpisu.description === undefined,
+    'and the tag is stripped from the description once it has been applied');
+  assert(woUpLift.tagFields === 2, 'counter: both fields recovered on the way up');
 
   console.log('PASS: all assertions ok (all routes incl. ->2.0, round-trips)');
 })().catch(e => { console.error('FAIL (exception): ' + (e.stack || e)); process.exit(1); });

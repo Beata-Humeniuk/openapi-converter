@@ -24,6 +24,13 @@ This file lists user-visible changes to OpenAPI Converter. The project follows
 
 ### Changed
 
+- One rule now decides where every marker value is written: the version's
+  official field if it has one — whatever that field is called — otherwise the
+  established `x-` extension, otherwise the marker stays in the description and
+  is reported. In Swagger 2.0 this makes `[deprecated]` on a schema write
+  `x-deprecated` instead of an invalid `deprecated`, and leaves `[writeOnly]`
+  in the description instead of writing a field 2.0 has no room for. Converting
+  the file up to 3.x turns such a waiting marker back into the real field.
 - `[nullable]` now follows the version of the file. Swagger 2.0 still gets
   `x-nullable` and OpenAPI 3.0 the `nullable` keyword, but OpenAPI 3.1 and 3.2
   state it in the type — `type: string` becomes `type: [string, null]` —

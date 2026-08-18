@@ -16,6 +16,15 @@ function specVersion(spec) {
   return isNaN(v) ? 3.0 : v;
 }
 
+// Swagger 2.0 ma zamkniety obiekt schematu: tylko wlasne pola i rozszerzenia
+// x-. Dla tych trzech markerow nie ma pola oficjalnego. Gdzie istnieje utarte
+// rozszerzenie, piszemy je; gdzie nie ma zadnego — znacznik zostaje w opisie.
+const SWAGGER2_SCHEMA_FIELD = {
+  nullable: 'x-nullable',
+  deprecated: 'x-deprecated',
+  writeOnly: null
+};
+
 function refSiblingsIgnored(spec) {
   if (!spec || typeof spec !== 'object') return false;
   if (spec.swagger === '2.0') return true;
@@ -199,18 +208,25 @@ function applyFieldTags(node, stats, version, isSwagger2Param, host, arrayOf, wr
 
     if (!fieldFitsNode(field.name, value, placed.target, host)) continue;
 
-    if (wrapRefs && wrapRefForSiblings(placed.target)) stats.refsWrapped += 1;
     let name = field.name;
-    if (name === 'example' && isSwagger2Param) name = 'x-example';
-    if (name === 'nullable') {
-      // 2.0 nie ma tego pola, a 3.1 je usunelo na rzecz tablicy typow.
-      if (isSwagger2) name = 'x-nullable';
-      else if (version >= 3.1) {
-        if (value === true) markNullableType(placed.target);
-        applied.push(tag);
-        stats.tagFields += 1;
+    if (isSwagger2 && Object.prototype.hasOwnProperty.call(SWAGGER2_SCHEMA_FIELD, name)) {
+      const stand = SWAGGER2_SCHEMA_FIELD[name];
+      if (!stand) {
+        stats.notApplied.push({ path: path, reason: name +
+          ' has no field in Swagger 2.0 and no established x- extension — kept in the description' });
         continue;
       }
+      name = stand;
+    }
+
+    if (wrapRefs && wrapRefForSiblings(placed.target)) stats.refsWrapped += 1;
+    if (name === 'example' && isSwagger2Param) name = 'x-example';
+    // 3.1 usunelo slowo kluczowe nullable na rzecz tablicy typow.
+    if (name === 'nullable' && version >= 3.1) {
+      if (value === true) markNullableType(placed.target);
+      applied.push(tag);
+      stats.tagFields += 1;
+      continue;
     }
     placed.target[name] = value;
     applied.push(tag);

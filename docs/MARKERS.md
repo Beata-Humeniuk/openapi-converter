@@ -49,7 +49,8 @@ convert **to** applies.
 | `[uniqueItems]`, `[readOnly]` | ✓ | ✓ | ✓ |
 | `[exclusiveMinimum: <v>]`, `[exclusiveMaximum: <v>]` | `true` / `false` | `true` / `false` | a number |
 | `[nullable]` | `x-nullable: true` | `nullable: true` | `null` added to `type` |
-| `[deprecated]`, `[writeOnly]` | written as given — see the note below | ✓ | ✓ |
+| `[deprecated]` | `x-deprecated: true` | ✓ | ✓ |
+| `[writeOnly]` | **not applied** — stays in the description | ✓ | ✓ |
 
 `[nullable]` differs because the versions differ: Swagger 2.0 has no such field
 and the extension writes the usual `x-nullable` extension, OpenAPI 3.0 has the
@@ -59,12 +60,28 @@ a list, so `type: string` becomes `type: [string, null]`.
 `[exclusiveMinimum:]` and `[exclusiveMaximum:]` are a flag next to `minimum` /
 `maximum` up to OpenAPI 3.0 and a number of their own from 3.1.
 
-`deprecated` and `writeOnly` do not exist on a Swagger 2.0 schema, which admits
-no fields beyond the ones it defines and `x-` extensions. The markers still
-write them, so that a contract downgraded from 3.x and then converted back
-keeps the information — **OpenAPI: Convert Version** turns `deprecated` into
-`x-deprecated` and `writeOnly` into a `[writeOnly]` marker when it downgrades.
-A strict Swagger 2.0 validator flags both fields.
+### Where a marker value is written
+
+One rule decides this, for every marker and every version:
+
+1. If the version has an **official field** for the value, it goes there — even
+   when the field is not named like the marker. `[nullable]` in OpenAPI 3.1
+   becomes `type: [string, null]`, because that is how 3.1 states it.
+2. If there is no official field but an **established `x-` extension**, the
+   extension is used. Swagger 2.0 has no `nullable` or `deprecated` on a
+   schema, so those become `x-nullable` and `x-deprecated`, and an example on a
+   non-body parameter becomes `x-example`.
+3. If there is neither, the marker **stays in the description** and is listed
+   after the command finishes. Swagger 2.0 has no `writeOnly` and no settled
+   extension for it, so `[writeOnly]` waits there.
+
+Nothing outside the specification, apart from those established extensions, is
+ever written into the file.
+
+A marker left waiting is not lost: **OpenAPI: Convert Version** applies the
+markers to the converted file, so converting a Swagger 2.0 contract up to 3.x
+turns the waiting `[writeOnly]` back into the real field. That is also how a
+3.x contract survives a trip down to 2.0 and back.
 
 ## Operation markers
 

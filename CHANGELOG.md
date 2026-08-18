@@ -10,7 +10,9 @@ This file lists user-visible changes to OpenAPI Converter. The project follows
 - New `[response: <code> "<description>" {...}]` operation marker. It adds a
   response with a custom status code (including ranges such as `4XX` in
   OpenAPI 3.x, and `default`), an optional description, and an optional JSON
-  example. Missing descriptions use the standard HTTP reason phrase.
+  example. Missing descriptions use the standard HTTP reason phrase. When the
+  response has a schema, the example keys are checked against it and unknown
+  keys are reported, the same way `[exampleBody:]` reports them.
 
 ## [1.0.0] - 2026-08-17
 

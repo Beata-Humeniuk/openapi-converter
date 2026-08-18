@@ -219,7 +219,24 @@ function responseExampleMime(op, r) {
   return 'application/json';
 }
 
-function applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats) {
+function reportUnknownExampleKeys(value, schema, host, at, stats) {
+  if (!value || typeof value !== 'object' || !schema) return;
+  if (Array.isArray(value)) {
+    const items = itemsTarget(schema, host);
+    if (!items) return;
+    for (const row of value) reportUnknownExampleKeys(row, items, host, at + '[]', stats);
+    return;
+  }
+  const target = objectTarget(schema, host);
+  if (!target) return;
+  for (const [key, val] of Object.entries(value)) {
+    const prop = target.properties[key];
+    if (!prop) { stats.unknownKeys.push(at + '.' + key); continue; }
+    reportUnknownExampleKeys(val, prop, host, at + '.' + key, stats);
+  }
+}
+
+function applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats, host, label) {
   if (isSwagger2 && /XX$/.test(parsed.code)) {
     return 'the ' + parsed.code + ' code range needs OpenAPI 3.x — Swagger 2.0 accepts only exact codes';
   }
@@ -236,28 +253,32 @@ function applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats) {
     r.description = parsed.description;
   }
   if (parsed.example !== undefined) {
+    let schema;
     if (isSwagger2) {
       const mime = (op.produces && op.produces[0]) || (rootProduces && rootProduces[0]) || 'application/json';
       if (!r.examples || typeof r.examples !== 'object') r.examples = {};
       r.examples[mime] = parsed.example;
+      schema = r.schema;
     } else {
       const mime = responseExampleMime(op, r);
       if (!r.content || typeof r.content !== 'object') r.content = {};
       if (!r.content[mime] || typeof r.content[mime] !== 'object') r.content[mime] = {};
       r.content[mime].example = parsed.example;
+      schema = r.content[mime].schema;
     }
     stats.examplesAdded += 1;
+    reportUnknownExampleKeys(parsed.example, schema, host, (label ? label + ' ' : '') + parsed.code, stats);
   }
   return null;
 }
 
-function applyOperationTags(op, isSwagger2, stats, rootProduces, label) {
+function applyOperationTags(op, isSwagger2, stats, rootProduces, label, host) {
   for (const key of ['summary', 'description']) {
-    applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label);
+    applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label, host);
   }
 }
 
-function applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label) {
+function applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label, host) {
   const text = String(op[key] || '');
   if (text.indexOf('[') < 0) return;
   const applied = [];
@@ -267,7 +288,7 @@ function applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label) {
     if (!field) continue;
     if (field.kind === 'response') {
       const parsed = parseResponseMarker(tag.raw);
-      const problem = parsed.error || applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats);
+      const problem = parsed.error || applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats, host, label);
       if (problem) { stats.notApplied.push({ path: label || 'operation', reason: problem }); continue; }
       applied.push(tag);
       stats.tagFields += 1;
@@ -347,7 +368,7 @@ function applyMarkers(spec) {
   if (!spec || typeof spec !== 'object') return stats;
   const isSwagger2 = spec.swagger === '2.0';
   const host = schemaHost(spec);
-  walkOperations(spec, (op, label) => applyOperationTags(op, isSwagger2, stats, spec.produces, label));
+  walkOperations(spec, (op, label) => applyOperationTags(op, isSwagger2, stats, spec.produces, label, host));
   const wrapRefs = refSiblingsIgnored(spec);
   walkSpec(spec, (node, path, exampleKey, arrayOf) => {
     applyFieldTags(node, stats, isSwagger2, exampleKey === 'x-example', host, arrayOf, wrapRefs, path);

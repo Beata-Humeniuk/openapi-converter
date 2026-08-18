@@ -27,39 +27,68 @@ complete example.
 
 Use these markers on schema properties and parameters.
 
-| Marker | Result |
-|---|---|
-| `[example: <value>]` | Sets `example`. Uses `x-example` for Swagger 2.0 non-body parameters. |
-| `[default: <value>]` | Sets `default`. |
-| `[exampleBody: {...}]` | Sets a complete object example and copies its values to matching fields. |
-| `[format: <name>]` | Sets `format`, for example `uuid`, `date`, `date-time`, `email`, or `int64`. |
-| `[pattern: <regex>]` | Sets `pattern` on a string field. |
-| `[enum: A, B, C]` | Sets `enum` and converts each value to the field type. |
-| `[title: <text>]` | Sets `title`. |
-| `[minimum: <n>]`, `[maximum: <n>]` | Set numeric limits. |
-| `[exclusiveMinimum: <value>]`, `[exclusiveMaximum: <value>]` | Set a number for OpenAPI 3.1+, or `true` or `false` for OpenAPI 3.0. |
-| `[multipleOf: <n>]` | Sets `multipleOf`. For example, `0.01` allows two decimal places. |
-| `[minLength: <n>]`, `[maxLength: <n>]` | Set string length limits. |
-| `[minItems: <n>]`, `[maxItems: <n>]` | Set array size limits. |
-| `[minProperties: <n>]`, `[maxProperties: <n>]` | Set object property limits. |
-| `[nullable]` | Sets `nullable: true`, or `x-nullable: true` in Swagger 2.0. |
-| `[deprecated]`, `[readOnly]`, `[writeOnly]`, `[uniqueItems]` | Set the matching field to `true`. |
+The version columns say what the marker produces in a file of that version.
+**OpenAPI: Apply Markers** reads the version from the file it runs on;
+**OpenAPI: Convert Version** converts first, so the column of the version you
+convert **to** applies.
+
+| Marker | Swagger 2.0 | OpenAPI 3.0 | OpenAPI 3.1 / 3.2 |
+|---|---|---|---|
+| `[example: <value>]` | `example`, or `x-example` on a non-body parameter | `example` | `example` |
+| `[default: <value>]` | `default` | `default` | `default` |
+| `[exampleBody: {...}]` | ✓ | ✓ | ✓ |
+| `[format: <name>]` | ✓ | ✓ | ✓ |
+| `[pattern: <regex>]` | ✓ | ✓ | ✓ |
+| `[enum: A, B, C]` | ✓ | ✓ | ✓ |
+| `[title: <text>]` | ✓ | ✓ | ✓ |
+| `[minimum: <n>]`, `[maximum: <n>]` | ✓ | ✓ | ✓ |
+| `[multipleOf: <n>]` | ✓ | ✓ | ✓ |
+| `[minLength: <n>]`, `[maxLength: <n>]` | ✓ | ✓ | ✓ |
+| `[minItems: <n>]`, `[maxItems: <n>]` | ✓ | ✓ | ✓ |
+| `[minProperties: <n>]`, `[maxProperties: <n>]` | ✓ | ✓ | ✓ |
+| `[uniqueItems]`, `[readOnly]` | ✓ | ✓ | ✓ |
+| `[exclusiveMinimum: <v>]`, `[exclusiveMaximum: <v>]` | `true` / `false` | `true` / `false` | a number |
+| `[nullable]` | `x-nullable: true` | `nullable: true` | `null` added to `type` |
+| `[deprecated]`, `[writeOnly]` | written as given — see the note below | ✓ | ✓ |
+
+`[nullable]` differs because the versions differ: Swagger 2.0 has no such field
+and the extension writes the usual `x-nullable` extension, OpenAPI 3.0 has the
+`nullable` keyword, and OpenAPI 3.1 dropped it in favour of stating the type as
+a list, so `type: string` becomes `type: [string, null]`.
+
+`[exclusiveMinimum:]` and `[exclusiveMaximum:]` are a flag next to `minimum` /
+`maximum` up to OpenAPI 3.0 and a number of their own from 3.1.
+
+`deprecated` and `writeOnly` do not exist on a Swagger 2.0 schema, which admits
+no fields beyond the ones it defines and `x-` extensions. The markers still
+write them, so that a contract downgraded from 3.x and then converted back
+keeps the information — **OpenAPI: Convert Version** turns `deprecated` into
+`x-deprecated` and `writeOnly` into a `[writeOnly]` marker when it downgrades.
+A strict Swagger 2.0 validator flags both fields.
 
 ## Operation markers
 
 Operation markers can appear in an operation's `description` or `summary`.
 
-| Marker | Result |
-|---|---|
-| `[operationId: <name>]` | Sets `operationId`. |
-| `[summary: <text>]` | Sets `summary`. |
-| `[tags: A, B]` | Sets `tags`. |
-| `[deprecated]` | Sets `deprecated: true`. |
-| `[consumes: <types>]` | Sets `consumes` in Swagger 2.0. In OpenAPI 3.x, changes request body media types. |
-| `[produces: <types>]` | Sets `produces` in Swagger 2.0. In OpenAPI 3.x, changes response media types. |
-| `[response: <code> "<description>" #<Schema> {...}]` | Adds a response with the given status code, an optional description, an optional body schema, and an optional JSON example. See [`response`](#response). |
-| `[responseCase: <code> <name> "<summary>" {...}]` | Adds one named example case to a response. OpenAPI 3.x only. See [`responseCase` and `requestCase`](#responsecase-and-requestcase). |
-| `[requestCase: <name> "<summary>" {...}]` | Adds one named example case to the request body. OpenAPI 3.x only. See [`responseCase` and `requestCase`](#responsecase-and-requestcase). |
+| Marker | Swagger 2.0 | OpenAPI 3.0 | OpenAPI 3.1 / 3.2 |
+|---|---|---|---|
+| `[operationId: <name>]` | ✓ | ✓ | ✓ |
+| `[summary: <text>]` | ✓ | ✓ | ✓ |
+| `[tags: A, B]` | ✓ | ✓ | ✓ |
+| `[deprecated]` | ✓ | ✓ | ✓ |
+| `[consumes: <types>]` | sets `consumes` | re-keys the request body media types | re-keys the request body media types |
+| `[produces: <types>]` | sets `produces` | re-keys the response media types | re-keys the response media types |
+| `[response: <code> …]` — exact code | `schema` + `examples` | `content` | `content` |
+| `[response: 4XX …]` — code range | **not applied** | ✓ | ✓ |
+| `[response: default …]` | ✓ | ✓ | ✓ |
+| `[responseCase: <code> <name> …]` | **not applied** | ✓ | ✓ |
+| `[requestCase: <name> …]` | **not applied** | ✓ | ✓ |
+
+See [`response`](#response) and
+[`responseCase` and `requestCase`](#responsecase-and-requestcase) for the full
+syntax. A marker marked **not applied** stays in the description and is listed
+after the command finishes: Swagger 2.0 has no code ranges, and it allows a
+single example per media type with nowhere to put a case name.
 
 Use `[x-<name>: <value>]` to add a vendor extension to a schema field or
 operation.
@@ -163,8 +192,9 @@ responses:
 
 Value rules:
 
-- The status code is `100`–`599`, a range such as `4XX` (OpenAPI 3.x only),
-  or `default`. An invalid code keeps the marker in the description.
+- The status code is `100`–`599`, a range such as `4XX` (OpenAPI 3.x only —
+  Swagger 2.0 has no ranges, so the marker stays in the description), or
+  `default`. An invalid code keeps the marker in the description.
 - Without a description, the standard HTTP reason phrase is used, for example
   `404` → `Not Found`.
 - The description may be unquoted (`[response: 403 No permission]`). Use

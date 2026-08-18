@@ -8,6 +8,14 @@ const {
   parseResponseMarker, parseCaseMarker, responseReason
 } = require('./markerScanner');
 
+// 2.0, 3.0, 3.1, 3.2 — decyduje o tym, ktore pola schematu wolno zapisac.
+function specVersion(spec) {
+  if (!spec || typeof spec !== 'object') return 3.0;
+  if (spec.swagger === '2.0') return 2.0;
+  const v = parseFloat(String(spec.openapi || ''));
+  return isNaN(v) ? 3.0 : v;
+}
+
 function refSiblingsIgnored(spec) {
   if (!spec || typeof spec !== 'object') return false;
   if (spec.swagger === '2.0') return true;
@@ -141,6 +149,12 @@ function spreadExample(node, value, host, wrapRefs, stats, path) {
   return any ? accepted : null;
 }
 
+function markNullableType(node) {
+  if (typeof node.type === 'string') node.type = [node.type, 'null'];
+  else if (Array.isArray(node.type)) { if (node.type.indexOf('null') < 0) node.type.push('null'); }
+  else node.type = 'null';
+}
+
 function stripTagSpans(node, text, applied, key) {
   if (!applied.length) return;
   const field = key || 'description';
@@ -151,7 +165,8 @@ function stripTagSpans(node, text, applied, key) {
   else delete node[field];
 }
 
-function applyFieldTags(node, stats, isSwagger2, isSwagger2Param, host, arrayOf, wrapRefs, path) {
+function applyFieldTags(node, stats, version, isSwagger2Param, host, arrayOf, wrapRefs, path) {
+  const isSwagger2 = version < 3;
   const text = String(node.description || '');
   if (text.indexOf('[') < 0) return;
   const applied = [];
@@ -187,7 +202,16 @@ function applyFieldTags(node, stats, isSwagger2, isSwagger2Param, host, arrayOf,
     if (wrapRefs && wrapRefForSiblings(placed.target)) stats.refsWrapped += 1;
     let name = field.name;
     if (name === 'example' && isSwagger2Param) name = 'x-example';
-    if (name === 'nullable' && isSwagger2) name = 'x-nullable';
+    if (name === 'nullable') {
+      // 2.0 nie ma tego pola, a 3.1 je usunelo na rzecz tablicy typow.
+      if (isSwagger2) name = 'x-nullable';
+      else if (version >= 3.1) {
+        if (value === true) markNullableType(placed.target);
+        applied.push(tag);
+        stats.tagFields += 1;
+        continue;
+      }
+    }
     placed.target[name] = value;
     applied.push(tag);
     stats.tagFields += 1;
@@ -465,8 +489,9 @@ function applyMarkers(spec) {
   const host = schemaHost(spec);
   walkOperations(spec, (op, label) => applyOperationTags(op, isSwagger2, stats, spec.produces, label, host));
   const wrapRefs = refSiblingsIgnored(spec);
+  const version = specVersion(spec);
   walkSpec(spec, (node, path, exampleKey, arrayOf) => {
-    applyFieldTags(node, stats, isSwagger2, exampleKey === 'x-example', host, arrayOf, wrapRefs, path);
+    applyFieldTags(node, stats, version, exampleKey === 'x-example', host, arrayOf, wrapRefs, path);
 
     checkPatternAgainstExample(node, path, stats);
   });

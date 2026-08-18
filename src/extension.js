@@ -47,19 +47,31 @@ async function pickFormat(placeHolder) {
   return format ? format.label === 'YAML' : null;
 }
 
-async function showResult(content, isYaml) {
-  const doc = await vscode.workspace.openTextDocument({
-    language: isYaml ? 'yaml' : 'json',
-    content
-  });
+function resultName(source, isYaml) {
+  const named = source && source.uri && source.uri.scheme === 'file';
+  const base = named
+    ? path.basename(source.uri.fsPath).replace(/\.(json|yaml|yml|md)$/i, '')
+    : 'openapi';
+  return base + '.' + (isYaml ? 'yaml' : 'json');
+}
+
+// The result opens as an untitled document. Name it after the target format so
+// Ctrl+S proposes that name: for an unnamed document VS Code falls back to the
+// first extension registered for the language, and a YAML extension such as
+// Red Hat YAML puts .yml there.
+async function showResult(content, isYaml, source) {
+  const uri = vscode.Uri.from({ scheme: 'untitled', path: resultName(source, isYaml) });
+  const doc = await vscode.workspace.openTextDocument(uri);
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(doc.uri, new vscode.Range(0, 0, doc.lineCount + 1, 0), content);
+  await vscode.workspace.applyEdit(edit);
   await vscode.window.showTextDocument(doc, { preview: false });
 }
 
 async function offerSaveBeside(source, content, isYaml, message) {
   if (!source.uri || source.uri.scheme !== 'file') return;
   const src = source.uri.fsPath;
-  const base = path.basename(src).replace(/\.(json|yaml|yml|md)$/i, '');
-  const target = path.join(path.dirname(src), base + '.' + (isYaml ? 'yaml' : 'json'));
+  const target = path.join(path.dirname(src), resultName(source, isYaml));
   const pick = await vscode.window.showInformationMessage(message + ' Save the result?', 'Save As');
   if (pick !== 'Save As') return;
   const uri = await vscode.window.showSaveDialog({
@@ -177,7 +189,7 @@ async function convertCommand(uri) {
     const isYaml = await pickFormat('This is not a Swagger/OpenAPI specification.');
     if (isYaml === null) return;
     const content = serialize(spec, isYaml);
-    await showResult(content, isYaml);
+    await showResult(content, isYaml, source);
     await offerSaveBeside(source, content, isYaml, 'Format converted successfully.');
     return;
   }
@@ -241,7 +253,7 @@ async function convertCommand(uri) {
   }
 
   const content = serialize(canonicalOrder(openapi), isYaml);
-  await showResult(content, isYaml);
+  await showResult(content, isYaml, source);
   const lifted = tagStats.tagFields + tagStats.mediaSet;
   await offerSaveBeside(source, content, isYaml, 'Converted ' + fromLabel + ' → ' + targetPick.label + '.' +
     (lifted ? ' Moved ' + lifted + ' marker values into OpenAPI fields.' : ''));

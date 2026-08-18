@@ -286,18 +286,35 @@ function applyOperationTags(op, isSwagger2, stats, rootProduces, label, host) {
   }
 }
 
+function applyResponseTags(op, tags, isSwagger2, stats, rootProduces, label, host) {
+  const done = new Set();
+  for (const tag of tags) {
+    const parsed = parseResponseMarker(tag.raw);
+    const problem = parsed.error || applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats, host, label);
+    if (problem) stats.notApplied.push({ path: label || 'operation', reason: problem });
+    else done.add(tag);
+  }
+  return done;
+}
+
 function applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label, host) {
   const text = String(op[key] || '');
   if (text.indexOf('[') < 0) return;
+  const tags = scanTags(text);
+  const isResponse = (tag) => {
+    const field = matchTagField(tag.key, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES);
+    return field && field.kind === 'response';
+  };
+
+  const responsesDone = applyResponseTags(op, tags.filter(isResponse), isSwagger2, stats, rootProduces, label, host);
+
   const applied = [];
   const assignedHere = [];
-  for (const tag of scanTags(text).reverse()) {
+  for (const tag of tags.reverse()) {
     const field = matchTagField(tag.key, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES);
     if (!field) continue;
     if (field.kind === 'response') {
-      const parsed = parseResponseMarker(tag.raw);
-      const problem = parsed.error || applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats, host, label);
-      if (problem) { stats.notApplied.push({ path: label || 'operation', reason: problem }); continue; }
+      if (!responsesDone.has(tag)) continue;
       applied.push(tag);
       stats.tagFields += 1;
       continue;

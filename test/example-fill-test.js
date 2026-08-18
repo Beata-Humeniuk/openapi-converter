@@ -940,6 +940,17 @@ assert(JSON.stringify(respBodyOp2.responses['500'].examples['application/json'])
   'Swagger2: the example still lands in examples');
 assert(respBodyOp2.summary === 'Zamówienie', 'the marker is removed from summary');
 
+const respOrderSpec = {
+  openapi: '3.1.0', info: { title: 'T', version: '1' },
+  paths: { '/kolejnosc': { get: {
+    description: '[response: 4XX "Klient"] [response: 5XX "Serwer"] [response: default "Domyslna"]',
+    responses: {}
+  } } }
+};
+applyMarkers(respOrderSpec);
+assert(Object.keys(respOrderSpec.paths['/kolejnosc'].get.responses).join() === '4XX,5XX,default',
+  'non-numeric codes keep the order they were written in, not the reverse');
+
 const respNoResponses = {
   swagger: '2.0', info: { title: 'T', version: '1' },
   paths: { '/y': { delete: { description: '[response: 204]' } } }

@@ -57,7 +57,7 @@ Operation markers can appear in an operation's `description` or `summary`.
 | `[deprecated]` | Sets `deprecated: true`. |
 | `[consumes: <types>]` | Sets `consumes` in Swagger 2.0. In OpenAPI 3.x, changes request body media types. |
 | `[produces: <types>]` | Sets `produces` in Swagger 2.0. In OpenAPI 3.x, changes response media types. |
-| `[response: <code> "<description>" {...}]` | Adds a response with the given status code, an optional description, and an optional JSON example. See [`response`](#response). |
+| `[response: <code> "<description>" #<Schema> {...}]` | Adds a response with the given status code, an optional description, an optional body schema, and an optional JSON example. See [`response`](#response). |
 
 Use `[x-<name>: <value>]` to add a vendor extension to a schema field or
 operation.
@@ -111,13 +111,13 @@ The shared schema is not changed. OpenAPI 3.1 and later allow fields next to
 
 `[response: ...]` adds a response to the operation. It can appear in the
 operation's `description` or `summary`, once for every code you want to add.
-After the status code you can give a description and a JSON example — both are
-optional:
+After the status code you can give a description, a body schema (`#Name`),
+and a JSON example — each part is optional:
 
 ```text
 Creates a payment.
-[response: 201 "Payment created" {"id": "PAY-001", "status": "NEW"}]
-[response: 409 "A payment with this ID already exists"]
+[response: 201 "Payment created" #Payment {"id": "PAY-001", "status": "NEW"}]
+[response: 409 "A payment with this ID already exists" #Error]
 [response: 503]
 ```
 
@@ -129,11 +129,17 @@ responses:
     description: Payment created
     content:
       application/json:
+        schema:
+          $ref: '#/components/schemas/Payment'
         example:
           id: PAY-001
           status: NEW
   '409':
     description: A payment with this ID already exists
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/Error'
   '503':
     description: Service Unavailable
 ```
@@ -145,7 +151,12 @@ Value rules:
 - Without a description, the standard HTTP reason phrase is used, for example
   `404` → `Not Found`.
 - The description may be unquoted (`[response: 403 No permission]`). Use
-  quotes when it contains brackets or braces.
+  quotes when it contains brackets, braces, or a `#`.
+- The body schema is a reference to a schema that already exists in the file:
+  `#Error`, or in full, `#/components/schemas/Error` or `#/definitions/Error`.
+  It is written as the version-correct `$ref` — `schema` in Swagger 2.0,
+  `content.<type>.schema` in OpenAPI 3.x. A name that does not exist in the
+  file keeps the marker in the description.
 - The example must be valid JSON — an object or a list. In OpenAPI 3.x it is
   written to `content.<type>.example`, using the media type the operation's
   responses already use, or `application/json`. In Swagger 2.0 it is written

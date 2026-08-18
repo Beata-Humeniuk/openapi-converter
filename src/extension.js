@@ -146,7 +146,8 @@ async function applyMarkersCommand(uri) {
 async function applySpecToSource(source, spec) {
   const doc = await vscode.workspace.openTextDocument(source.uri);
   const isYaml = !/^\s*\{/.test(source.text);
-  const newText = serialize(spec, isYaml);
+  let newText = serialize(spec, isYaml);
+  if (!/\n$/.test(source.text)) newText = newText.replace(/\n$/, '');
   const edit = new vscode.WorkspaceEdit();
   edit.replace(doc.uri, new vscode.Range(0, 0, doc.lineCount + 1, 0), newText);
   await vscode.workspace.applyEdit(edit);

@@ -58,6 +58,8 @@ Operation markers can appear in an operation's `description` or `summary`.
 | `[consumes: <types>]` | Sets `consumes` in Swagger 2.0. In OpenAPI 3.x, changes request body media types. |
 | `[produces: <types>]` | Sets `produces` in Swagger 2.0. In OpenAPI 3.x, changes response media types. |
 | `[response: <code> "<description>" #<Schema> {...}]` | Adds a response with the given status code, an optional description, an optional body schema, and an optional JSON example. See [`response`](#response). |
+| `[responseCase: <code> <name> "<summary>" {...}]` | Adds one named example case to a response. OpenAPI 3.x only. See [`responseCase` and `requestCase`](#responsecase-and-requestcase). |
+| `[requestCase: <name> "<summary>" {...}]` | Adds one named example case to the request body. OpenAPI 3.x only. |
 
 Use `[x-<name>: <value>]` to add a vendor extension to a schema field or
 operation.
@@ -187,6 +189,68 @@ Value rules:
   schema name, a code range in Swagger 2.0 — stays in the description and is
   listed after the command finishes, with the operation and the reason, for
   example `POST /payments — the body schema Eror does not exist in the file`.
+
+## `responseCase` and `requestCase`
+
+One response code, or one request body, can carry several named examples —
+one per case you want to document. Each marker adds one case:
+
+```text
+Creates an order.
+[requestCase: minimal "Case 1 - required fields only" {"customerId": "C-1"}]
+[requestCase: withCoupon "Case 2 - with a discount coupon" {"customerId": "C-1", "couponCode": "SPRING10"}]
+[responseCase: 200 confirmed "Case A - confirmed straight away" {"orderId": "ORD-1", "status": "CONFIRMED"}]
+[responseCase: 200 awaitingPayment "Case B - waiting for payment" {"orderId": "ORD-2", "status": "AWAITING_PAYMENT"}]
+```
+
+becomes:
+
+```yaml
+requestBody:
+  content:
+    application/json:
+      examples:
+        minimal:
+          summary: Case 1 - required fields only
+          value: { customerId: C-1 }
+        withCoupon:
+          summary: Case 2 - with a discount coupon
+          value: { customerId: C-1, couponCode: SPRING10 }
+responses:
+  '200':
+    content:
+      application/json:
+        examples:
+          confirmed:
+            summary: Case A - confirmed straight away
+            value: { orderId: ORD-1, status: CONFIRMED }
+          awaitingPayment:
+            summary: Case B - waiting for payment
+            value: { orderId: ORD-2, status: AWAITING_PAYMENT }
+```
+
+Swagger UI shows the case names in a dropdown, so a reader can switch between
+them.
+
+Value rules:
+
+- **OpenAPI 3.x only.** Swagger 2.0 has one example per media type and no place
+  for a name, so the marker is not applied: it stays in the description and is
+  listed in the report. Convert the file to 3.x first, then apply the markers.
+- The case name comes right after the status code (`responseCase`) or first
+  (`requestCase`). It may contain letters, digits, `_` and `-`.
+- The summary is optional, quoted or unquoted. The example itself is required
+  and must be valid JSON.
+- Cases are written in the order the markers appear. Repeating a name
+  overwrites that case.
+- A single example set by `[response:]` on the same media type is replaced by
+  the named cases, and the replacement is reported — OpenAPI 3.x forbids
+  `example` and `examples` side by side.
+- `[responseCase:]` for a code that does not exist yet creates the response,
+  using the standard HTTP reason phrase as its description.
+- Case values are checked against the schema the same way as in
+  [`response`](#response); unknown keys are reported with the case name, for
+  example `POST /orders 200 [confirmed].typo`.
 
 ## `exampleBody`
 

@@ -15,6 +15,13 @@ This file lists user-visible changes to OpenAPI Converter. The project follows
   schema, the example keys are checked against it and unknown keys are
   reported, the same way `[exampleBody:]` reports them.
 
+- New `[responseCase: <code> <name> "<summary>" {...}]` and
+  `[requestCase: <name> "<summary>" {...}]` operation markers. They add named
+  example cases, so one response code — or the request body — can document
+  several scenarios at once, which Swagger UI shows in a dropdown. OpenAPI 3.x
+  only; in Swagger 2.0 the marker stays in the description and is reported,
+  because 2.0 allows a single example per media type.
+
 ### Fixed
 
 - **Convert Version** now names the result document after the target format, so

@@ -85,7 +85,9 @@ const OPERATION_TAG_FIELDS = {
   consumes: 'stringList',
   produces: 'stringList',
   deprecated: 'flag',
-  response: 'response'
+  response: 'response',
+  requestcase: 'case',
+  responsecase: 'case'
 };
 const OPERATION_FIELD_NAMES = { operationid: 'operationId' };
 
@@ -338,10 +340,45 @@ function coerceTagValue(kind, raw, node, host) {
   }
 }
 
+function parseCaseMarker(raw, withCode) {
+  const text = String(raw === undefined ? '' : raw).trim();
+  let rest = text;
+  let code;
+  if (withCode) {
+    const m = rest.match(/^(\S+)\s*/);
+    code = m && normalizeResponseCode(m[1]);
+    if (!code) return { error: 'the value must start with a status code — 100-599, a range such as 4XX, or default' };
+    rest = rest.slice(m[0].length).trim();
+  }
+  const n = rest.match(/^([A-Za-z][A-Za-z0-9_-]*)\s*/);
+  if (!n) return { error: 'the case needs a name, for example [' + (withCode ? 'responseCase: 200 ' : 'requestCase: ') + 'confirmed {...}]' };
+  const name = n[1];
+  rest = rest.slice(n[0].length).trim();
+
+  let summary;
+  if (rest[0] === '"') {
+    const span = quotedSpan(rest);
+    if (span) {
+      summary = unquote(rest.slice(0, span));
+      rest = rest.slice(span).trim();
+    }
+  } else if (rest && rest[0] !== '{' && rest[0] !== '[') {
+    const cut = jsonTailStart(rest);
+    summary = rest.slice(0, cut).trim();
+    rest = rest.slice(cut).trim();
+  }
+
+  if (!rest) return { error: 'the case ' + name + ' has no example — add a JSON object or list' };
+  let value;
+  try { value = JSON.parse(rest); }
+  catch (e) { return { error: 'the example for case ' + name + ' is not valid JSON' }; }
+  return { code: code, name: name, summary: summary, value: value };
+}
+
 module.exports = {
   scanTags, tidyDescription,
   SCHEMA_TAG_FIELDS, SCHEMA_FIELD_NAMES, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES,
   matchTagField, isArraySchema, fieldFitsNode,
   coerceValue, coerceTagValue, resolveScalarType,
-  parseResponseMarker, responseReason
+  parseResponseMarker, parseCaseMarker, responseReason
 };

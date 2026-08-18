@@ -5,7 +5,7 @@ const {
   SCHEMA_TAG_FIELDS, SCHEMA_FIELD_NAMES, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES,
   matchTagField, isArraySchema, fieldFitsNode,
   coerceValue, coerceTagValue, resolveScalarType,
-  parseResponseMarker, responseReason
+  parseResponseMarker, parseCaseMarker, responseReason
 } = require('./markerScanner');
 
 function refSiblingsIgnored(spec) {
@@ -286,11 +286,85 @@ function applyOperationTags(op, isSwagger2, stats, rootProduces, label, host) {
   }
 }
 
+function requestExampleMime(op) {
+  const content = op.requestBody && op.requestBody.content;
+  const keys = content ? Object.keys(content) : [];
+  return keys.length ? keys[0] : 'application/json';
+}
+
+// Named example cases live in content.<type>.examples, which only OpenAPI 3.x
+// has. The whole media type object is returned so the caller can drop a plain
+// example: the two fields are mutually exclusive and a file carrying both is
+// rejected by validators.
+function caseMediaType(op, parsed, isResponse, stats) {
+  if (!isResponse) {
+    if (!op.requestBody || typeof op.requestBody !== 'object') {
+      return { error: 'the operation has no request body' };
+    }
+    if (op.requestBody.$ref) return { error: 'the request body is a $ref reference — edit the shared body instead' };
+    const mime = requestExampleMime(op);
+    if (!op.requestBody.content || typeof op.requestBody.content !== 'object') op.requestBody.content = {};
+    if (!op.requestBody.content[mime] || typeof op.requestBody.content[mime] !== 'object') op.requestBody.content[mime] = {};
+    return { media: op.requestBody.content[mime], at: 'request' };
+  }
+  if (!op.responses || typeof op.responses !== 'object') op.responses = {};
+  let r = op.responses[parsed.code];
+  if (r && typeof r === 'object' && r.$ref) {
+    return { error: 'response ' + parsed.code + ' is a $ref reference — edit the shared response instead' };
+  }
+  if (!r || typeof r !== 'object') {
+    r = { description: responseReason(parsed.code) };
+    op.responses[parsed.code] = r;
+    stats.responsesAdded += 1;
+  }
+  const mime = responseExampleMime(op, r);
+  if (!r.content || typeof r.content !== 'object') r.content = {};
+  if (!r.content[mime] || typeof r.content[mime] !== 'object') r.content[mime] = {};
+  return { media: r.content[mime], at: parsed.code };
+}
+
+function applyCaseMarker(op, parsed, isResponse, isSwagger2, stats, host, label) {
+  if (isSwagger2) {
+    return 'named example cases need OpenAPI 3.x — Swagger 2.0 allows only one example per media type';
+  }
+  const spot = caseMediaType(op, parsed, isResponse, stats);
+  if (spot.error) return spot.error;
+  const media = spot.media;
+
+  if (!media.examples || typeof media.examples !== 'object') media.examples = {};
+  if (media.example !== undefined) {
+    delete media.example;
+    stats.notApplied.push({
+      path: (label ? label + ' ' : '') + spot.at,
+      reason: 'the single example was replaced by named cases — OpenAPI 3.x forbids example and examples together'
+    });
+  }
+  const entry = {};
+  if (parsed.summary) entry.summary = parsed.summary;
+  entry.value = parsed.value;
+  media.examples[parsed.name] = entry;
+  stats.examplesAdded += 1;
+  reportUnknownExampleKeys(parsed.value, media.schema, host,
+    (label ? label + ' ' : '') + spot.at + ' [' + parsed.name + ']', stats);
+  return null;
+}
+
 function applyResponseTags(op, tags, isSwagger2, stats, rootProduces, label, host) {
   const done = new Set();
+  // [response:] first: a case may target a response the same note declares.
   for (const tag of tags) {
+    if (String(tag.key).toLowerCase() !== 'response') continue;
     const parsed = parseResponseMarker(tag.raw);
     const problem = parsed.error || applyResponseMarker(op, parsed, isSwagger2, rootProduces, stats, host, label);
+    if (problem) stats.notApplied.push({ path: label || 'operation', reason: problem });
+    else done.add(tag);
+  }
+  for (const tag of tags) {
+    const key = String(tag.key).toLowerCase();
+    if (key !== 'requestcase' && key !== 'responsecase') continue;
+    const isResponse = key === 'responsecase';
+    const parsed = parseCaseMarker(tag.raw, isResponse);
+    const problem = parsed.error || applyCaseMarker(op, parsed, isResponse, isSwagger2, stats, host, label);
     if (problem) stats.notApplied.push({ path: label || 'operation', reason: problem });
     else done.add(tag);
   }
@@ -303,7 +377,7 @@ function applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label, h
   const tags = scanTags(text);
   const isResponse = (tag) => {
     const field = matchTagField(tag.key, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES);
-    return field && field.kind === 'response';
+    return field && (field.kind === 'response' || field.kind === 'case');
   };
 
   const responsesDone = applyResponseTags(op, tags.filter(isResponse), isSwagger2, stats, rootProduces, label, host);
@@ -313,7 +387,7 @@ function applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label, h
   for (const tag of tags.reverse()) {
     const field = matchTagField(tag.key, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES);
     if (!field) continue;
-    if (field.kind === 'response') {
+    if (field.kind === 'response' || field.kind === 'case') {
       if (!responsesDone.has(tag)) continue;
       applied.push(tag);
       stats.tagFields += 1;

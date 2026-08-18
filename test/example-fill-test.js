@@ -959,4 +959,82 @@ applyMarkers(respNoResponses);
 assert(respNoResponses.paths['/y'].delete.responses['204'].description === 'No Content',
   'an operation without a responses object gets one');
 
+const caseSpec = {
+  openapi: '3.0.3', info: { title: 'T', version: '1' },
+  paths: { '/orders': { post: {
+    operationId: 'createOrder',
+    description: 'Zaklada zamowienie.\n' +
+      '[requestCase: minimalny "Case 1 - pola wymagane" {"customerId": "C-1", "items": [{"sku": "S-1"}]}]\n' +
+      '[requestCase: zRabatem {"customerId": "C-1", "couponCode": "X10", "items": [{"sku": "S-1"}]}]\n' +
+      '[responseCase: 200 potwierdzone "Case A" {"orderId": "ORD-1", "status": "CONFIRMED", "literowka": 1}]\n' +
+      '[responseCase: 200 oczekuje "Case B" {"orderId": "ORD-2", "status": "AWAITING_PAYMENT"}]\n' +
+      '[responseCase: 400 brakPola "Case C" {"code": "BAD_REQUEST", "literowka": 1}]',
+    requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/OrderRequest' } } } },
+    responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } } }
+  } } },
+  components: { schemas: {
+    OrderRequest: { type: 'object', properties: { customerId: { type: 'string' }, couponCode: { type: 'string' }, items: { type: 'array', items: { type: 'object', properties: { sku: { type: 'string' } } } } } },
+    Order: { type: 'object', properties: { orderId: { type: 'string' }, status: { type: 'string' } } }
+  } }
+};
+const caseStats = applyMarkers(caseSpec);
+const caseOp = caseSpec.paths['/orders'].post;
+const reqEx = caseOp.requestBody.content['application/json'].examples;
+const okEx = caseOp.responses['200'].content['application/json'].examples;
+assert(Object.keys(reqEx).join() === 'minimalny,zRabatem', 'several named request cases, in the order written');
+assert(reqEx.minimalny.summary === 'Case 1 - pola wymagane', 'a request case keeps its summary');
+assert(reqEx.minimalny.value.customerId === 'C-1', 'a request case keeps its value');
+assert(reqEx.zRabatem.summary === undefined, 'a case without a summary gets only value');
+assert(Object.keys(okEx).join() === 'potwierdzone,oczekuje', 'several named cases under ONE response code');
+assert(okEx.oczekuje.value.status === 'AWAITING_PAYMENT', 'the second case for 200 keeps its own value');
+assert(caseOp.responses['400'].description === 'Bad Request', 'a case creates a missing response with the reason phrase');
+assert(caseStats.unknownKeys.indexOf('POST /orders 200 [potwierdzone].literowka') >= 0,
+  'a case example is checked against the response schema, labelled with the case name');
+assert(caseStats.unknownKeys.indexOf('POST /orders 200 [oczekuje].status') < 0, 'known keys are not reported');
+assert(caseOp.description === 'Zaklada zamowienie.', 'case markers are removed from the description');
+assert(caseStats.examplesAdded === 5, 'every case counts as an example');
+
+const caseSnapshot = JSON.stringify(caseSpec);
+applyMarkers(caseSpec);
+assert(JSON.stringify(caseSpec) === caseSnapshot, 'named cases are idempotent');
+
+const caseSwagger2 = {
+  swagger: '2.0', info: { title: 'T', version: '1' },
+  paths: { '/o': { post: { operationId: 'c',
+    description: 'Op. [responseCase: 200 potwierdzone "Case A" {"a": 1}] [response: 404 "Nie znaleziono"]',
+    responses: {} } } }
+};
+const case2Stats = applyMarkers(caseSwagger2);
+const case2Op = caseSwagger2.paths['/o'].post;
+assert(case2Op.responses['404'] !== undefined && case2Op.responses['200'] === undefined,
+  'Swagger 2.0: [response:] still works, [responseCase:] is not applied');
+assert(/\[responseCase:/.test(case2Op.description), 'Swagger 2.0: the rejected case stays visible in the description');
+assert(case2Stats.notApplied.some((n) => /OpenAPI 3\.x/.test(n.reason)), 'Swagger 2.0: the case is reported with a reason');
+
+const caseConflict = {
+  openapi: '3.0.3', info: { title: 'T', version: '1' },
+  paths: { '/o': { get: { operationId: 'g',
+    description: '[response: 200 "OK" {"a": 1}] [responseCase: 200 przypadek "Case A" {"a": 2}]',
+    responses: {} } } }
+};
+const conflictStats = applyMarkers(caseConflict);
+const conflictMedia = caseConflict.paths['/o'].get.responses['200'].content['application/json'];
+assert(conflictMedia.example === undefined && conflictMedia.examples.przypadek !== undefined,
+  'a named case replaces a single example — 3.x forbids both on one media type');
+assert(conflictStats.notApplied.some((n) => /forbids example and examples/.test(n.reason)),
+  'and the replacement is reported');
+
+const caseNoBody = {
+  openapi: '3.0.3', info: { title: 'T', version: '1' },
+  paths: { '/o': { get: { operationId: 'g',
+    description: '[requestCase: x "Case" {"a": 1}] [responseCase: 200 y {"b": 2}] [responseCase: 200 {"c": 3}]',
+    responses: {} } } }
+};
+const noBodyStats = applyMarkers(caseNoBody);
+assert(noBodyStats.notApplied.some((n) => /no request body/.test(n.reason)),
+  'a request case on an operation without a body is reported');
+assert(noBodyStats.notApplied.some((n) => /needs a name/.test(n.reason)), 'a case without a name is reported');
+assert(caseNoBody.paths['/o'].get.responses['200'].content['application/json'].examples.y.value.b === 2,
+  'the valid case in the same description is still applied');
+
 console.log('example-fill-test OK');

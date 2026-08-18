@@ -244,8 +244,8 @@ Value rules:
 - Cases are written in the order the markers appear. Repeating a name
   overwrites that case.
 - A single example set by `[response:]` on the same media type is replaced by
-  the named cases, and the replacement is reported — OpenAPI 3.x forbids
-  `example` and `examples` side by side.
+  the named cases, because OpenAPI 3.x forbids `example` and `examples` side by
+  side.
 - `[responseCase:]` for a code that does not exist yet creates the response,
   using the standard HTTP reason phrase as its description.
 - Case values are checked against the schema the same way as in

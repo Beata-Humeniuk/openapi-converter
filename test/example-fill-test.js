@@ -1021,8 +1021,8 @@ const conflictStats = applyMarkers(caseConflict);
 const conflictMedia = caseConflict.paths['/o'].get.responses['200'].content['application/json'];
 assert(conflictMedia.example === undefined && conflictMedia.examples.przypadek !== undefined,
   'a named case replaces a single example — 3.x forbids both on one media type');
-assert(conflictStats.notApplied.some((n) => /forbids example and examples/.test(n.reason)),
-  'and the replacement is reported');
+assert(conflictStats.notApplied.length === 0,
+  'replacing a single example with cases is normal — it must not raise a warning');
 
 const caseNoBody = {
   openapi: '3.0.3', info: { title: 'T', version: '1' },

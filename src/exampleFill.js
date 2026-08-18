@@ -332,13 +332,9 @@ function applyCaseMarker(op, parsed, isResponse, isSwagger2, stats, host, label)
   const media = spot.media;
 
   if (!media.examples || typeof media.examples !== 'object') media.examples = {};
-  if (media.example !== undefined) {
-    delete media.example;
-    stats.notApplied.push({
-      path: (label ? label + ' ' : '') + spot.at,
-      reason: 'the single example was replaced by named cases — OpenAPI 3.x forbids example and examples together'
-    });
-  }
+  // OpenAPI 3.x rejects a media type carrying both, and asking for cases says
+  // which one is wanted. Nothing to report: the marker did what it promised.
+  delete media.example;
   const entry = {};
   if (parsed.summary) entry.summary = parsed.summary;
   entry.value = parsed.value;

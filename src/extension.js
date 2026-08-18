@@ -55,10 +55,6 @@ function resultName(source, isYaml) {
   return base + '.' + (isYaml ? 'yaml' : 'json');
 }
 
-// The result opens as an untitled document. Name it after the target format so
-// Ctrl+S proposes that name: for an unnamed document VS Code falls back to the
-// first extension registered for the language, and a YAML extension such as
-// Red Hat YAML puts .yml there.
 async function showResult(content, isYaml, source) {
   const uri = vscode.Uri.from({ scheme: 'untitled', path: resultName(source, isYaml) });
   const doc = await vscode.workspace.openTextDocument(uri);
@@ -236,10 +232,6 @@ async function convertCommand(uri) {
     return;
   }
 
-  // Markers are applied to the converted document, never to the source, so
-  // every marker is judged by what the TARGET version supports: converting
-  // upwards applies the markers the new version has gained, and converting
-  // downwards leaves the ones it lost in the descriptions.
   const tagStats = liftDescriptionTags(openapi);
 
   if (warnings && warnings.length) {
@@ -260,9 +252,10 @@ async function convertCommand(uri) {
   await showResult(content, isYaml, source);
   const lifted = tagStats.tagFields + tagStats.mediaSet;
   const kept = tagStats.notApplied.length;
-  await offerSaveBeside(source, content, isYaml, 'Converted ' + fromLabel + ' → ' + targetPick.label + '.' +
-    (lifted ? ' Moved ' + lifted + ' marker values into OpenAPI fields.' : '') +
-    (kept ? ' ' + kept + ' markers stayed in the descriptions — ' + targetPick.label + ' does not support them.' : ''));
+  const summary = ['Converted ' + fromLabel + ' → ' + targetPick.label + '.'];
+  if (lifted) summary.push('Moved ' + lifted + ' marker values into OpenAPI fields.');
+  if (kept) summary.push(kept + ' markers stayed in the descriptions — ' + targetPick.label + ' does not support them.');
+  await offerSaveBeside(source, content, isYaml, summary.join(' '));
 }
 
 function activate(context) {

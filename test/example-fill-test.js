@@ -1037,8 +1037,6 @@ assert(noBodyStats.notApplied.some((n) => /needs a name/.test(n.reason)), 'a cas
 assert(caseNoBody.paths['/o'].get.responses['200'].content['application/json'].examples.y.value.b === 2,
   'the valid case in the same description is still applied');
 
-// Kontrakt wygenerowany przez narzedzie ma juz czesc kodow. Znaczniki maja je
-// uzupelnic, nie zastapic — to gwarancja, na ktorej opiera sie caly przeplyw.
 const mergeSpec = {
   openapi: '3.1.0', info: { title: 'T', version: '1' },
   paths: { '/orders/{id}': { get: { operationId: 'getOrder',
@@ -1087,8 +1085,6 @@ assert(mergeOp.responses['500'].description === 'Blad z generatora' &&
   mergeOp.responses['500'].content['application/json'].schema.$ref === '#/components/schemas/ApiError',
   'a case added to a generated response keeps its description and schema');
 
-// [nullable] wyglada inaczej w kazdej linii wersji: 2.0 nie ma tego pola,
-// 3.0 ma slowo kluczowe, a 3.1 je usunelo na rzecz tablicy typow.
 const nullableByVersion = (root, host) => {
   const spec = Object.assign({ info: { title: 'T', version: '1' }, paths: {} }, root,
     host === 'definitions'

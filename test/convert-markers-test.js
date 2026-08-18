@@ -1,12 +1,9 @@
-// Kolejnosc: Convert Version aplikuje znaczniki DO PLIKU PO KONWERSJI, wiec o
-// kazdym znaczniku decyduje wersja DOCELOWA. Cztery scenariusze uzytkownika.
 const { applyMarkers, liftDescriptionTags } = require('../src/exampleFill');
 const { convertSpec } = require('../src/convertCore');
 
 const assert = (cond, msg) => { if (!cond) { console.error('FAIL: ' + msg); process.exit(1); } };
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
-// Zrodlo 2.0: [response: 404] dziala wszedzie, [response: 4XX] i [responseCase:] tylko w 3.x
 const source20 = () => ({
   swagger: '2.0', info: { title: 'T', version: '1' }, produces: ['application/json'],
   paths: { '/o': { post: { operationId: 'c',
@@ -24,7 +21,6 @@ const desc = (spec) => spec.paths['/o'].post.description || '';
 const field = (spec) => (spec.definitions || spec.components.schemas).P.properties.a;
 
 (async () => {
-  // 1. Konwersja w gore — wszystkie znaczniki dostepne w wersji docelowej wchodza od razu.
   let { openapi } = await convertSpec(clone(source20()), '3.1.0');
   let stats = liftDescriptionTags(openapi);
   assert(codes(openapi) === '200,404,4XX', '1: upgrade applies both the portable code and the 3.x-only range');
@@ -36,7 +32,6 @@ const field = (spec) => (spec.definitions || spec.components.schemas).P.properti
     field(openapi).nullable === undefined && field(openapi)['x-nullable'] === undefined,
     '1: field markers use the TARGET semantics — 3.1 states null in the type, it has no nullable keyword');
 
-  // 2. Najpierw znaczniki na 2.0, potem konwersja — reszta wchodzi przy konwersji.
   const stepOne = source20();
   const stats2a = applyMarkers(stepOne);
   assert(codes(stepOne) === '200,404', '2: on 2.0 only the portable marker is applied');
@@ -52,7 +47,6 @@ const field = (spec) => (spec.definitions || spec.components.schemas).P.properti
   assert(desc(openapi) === 'Op.', '2: no second Apply Markers run is needed afterwards');
   assert(stats2b.notApplied.length === 0, '2: nothing is left over');
 
-  // 3. Cel nie obsluguje czesci znacznikow — te zostaja w opisach.
   ({ openapi } = await convertSpec(clone(source20()), '2.0'));
   const stats3 = liftDescriptionTags(openapi);
   assert(codes(openapi) === '200,404', '3: a target without support applies only what it can');
@@ -60,7 +54,6 @@ const field = (spec) => (spec.definitions || spec.components.schemas).P.properti
     '3: unsupported markers stay in the description');
   assert(stats3.notApplied.length === 2, '3: and are reported with a reason');
 
-  // 4. Downgrade z 3.0 — nieobslugiwane znaczniki trafiaja do opisow, reszta w semantyce 2.0.
   const source30 = {
     openapi: '3.0.3', info: { title: 'T', version: '1' },
     paths: { '/o': { post: { operationId: 'c',

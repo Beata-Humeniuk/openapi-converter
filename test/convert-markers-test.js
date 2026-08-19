@@ -74,5 +74,30 @@ const field = (spec) => (spec.definitions || spec.components.schemas).P.properti
   assert(field(openapi)['x-nullable'] === true && field(openapi).nullable === undefined,
     '4: field markers follow the TARGET semantics — x-nullable in 2.0');
 
-  console.log('convert-markers-test OK (4 scenarios)');
+  const refSiblings = {
+    swagger: '2.0', info: { title: 'T', version: '1' }, paths: {},
+    definitions: {
+      Holder: { type: 'object', properties: {
+        viaRef:   { $ref: '#/definitions/Code', description: 'Shared type. [example: "AB"]' },
+        inItems:  { type: 'array', items: { $ref: '#/definitions/Code', description: 'Shared element. [example: ["AB", "CD"]]' } },
+        untouched: { $ref: '#/definitions/Code', description: 'A plain note with no marker.' }
+      } },
+      Code: { type: 'string' }
+    }
+  };
+  ({ openapi } = await convertSpec(refSiblings, '3.0.3'));
+  liftDescriptionTags(openapi);
+  const H = openapi.components.schemas.Holder.properties;
+  assert(H.viaRef.example === 'AB',
+    '5: a marker written next to $ref survives the conversion — 3.0 ignores $ref siblings, so it is wrapped in allOf first');
+  assert(JSON.stringify(H.viaRef.allOf) === '[{"$ref":"#/components/schemas/Code"}]', '5: the reference itself is kept');
+  assert(JSON.stringify(H.inItems.example) === '["AB","CD"]', '5: the same on the element of a list');
+  assert(openapi.components.schemas.Code.example === undefined, '5: the shared type stays untouched');
+  assert(H.untouched.$ref === '#/components/schemas/Code' && H.untouched.allOf === undefined,
+    '5: a description with no marker is not worth restructuring the field for');
+  assert(refSiblings.definitions.Holder.properties.viaRef.$ref === '#/definitions/Code' &&
+    refSiblings.definitions.Holder.properties.viaRef.allOf === undefined,
+    '5: the file the conversion read from is left exactly as it was');
+
+  console.log('convert-markers-test OK (5 scenarios)');
 })();

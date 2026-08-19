@@ -539,6 +539,14 @@ function stripDescriptionTags(description) {
   return tidyDescription(out);
 }
 
+function protectRefSiblings(spec) {
+  walkSpec(spec, (node) => {
+    if (!node || !node.$ref || typeof node.description !== 'string') return;
+    if (stripDescriptionTags(node.description) !== node.description) wrapRefForSiblings(node);
+  });
+  return spec;
+}
+
 function newStats() {
   return {
     examplesAdded: 0, defaultsAdded: 0, fromTags: 0, mediaSet: 0,
@@ -575,6 +583,6 @@ function applyMarkers(spec) {
 }
 
 module.exports = {
-  applyMarkers, liftDescriptionTags,
+  applyMarkers, liftDescriptionTags, protectRefSiblings,
   scanTags, stripDescriptionTags, exampleTagValue, defaultTagValue, coerceValue
 };

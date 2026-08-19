@@ -3,6 +3,7 @@ const path = require('path');
 const yaml = require('js-yaml');
 const { detectVersion, detectExactVersion, convertSpec, canonicalOrder, OPENAPI_VERSIONS, LATEST_VERSION } = require('./convertCore');
 const { applyMarkers, liftDescriptionTags } = require('./exampleFill');
+const { resultName, resultPath } = require('./resultNaming');
 
 function versionTag() {
   const ext = vscode.extensions.getExtension('beatahumeniuk.openapi-converter');
@@ -47,27 +48,37 @@ async function pickFormat(placeHolder) {
   return format ? format.label === 'YAML' : null;
 }
 
-function resultName(source, isYaml) {
-  const named = source && source.uri && source.uri.scheme === 'file';
-  const base = named
-    ? path.basename(source.uri.fsPath).replace(/\.(json|yaml|yml|md)$/i, '')
-    : 'openapi';
-  return base + '.' + (isYaml ? 'yaml' : 'json');
+function sourcePath(source) {
+  return source && source.uri && source.uri.scheme === 'file' ? source.uri.fsPath : null;
 }
 
-async function showResult(content, isYaml, source) {
-  const uri = vscode.Uri.from({ scheme: 'untitled', path: resultName(source, isYaml) });
-  const doc = await vscode.workspace.openTextDocument(uri);
+function resultDirectory(source) {
+  const file = sourcePath(source);
+  if (file) return path.dirname(file);
+  const folder = (vscode.workspace.workspaceFolders || [])[0];
+  return folder && folder.uri.scheme === 'file' ? folder.uri.fsPath : null;
+}
+
+async function openAssociated(target, content) {
+  const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(target).with({ scheme: 'untitled' }));
   const edit = new vscode.WorkspaceEdit();
   edit.replace(doc.uri, new vscode.Range(0, 0, doc.lineCount + 1, 0), content);
   await vscode.workspace.applyEdit(edit);
+  return doc;
+}
+
+async function showResult(content, isYaml, source) {
+  const target = resultPath(sourcePath(source), resultDirectory(source), isYaml);
+  const doc = target
+    ? await openAssociated(target, content)
+    : await vscode.workspace.openTextDocument({ language: isYaml ? 'yaml' : 'json', content: content });
   await vscode.window.showTextDocument(doc, { preview: false });
 }
 
 async function offerSaveBeside(source, content, isYaml, message) {
-  if (!source.uri || source.uri.scheme !== 'file') return;
-  const src = source.uri.fsPath;
-  const target = path.join(path.dirname(src), resultName(source, isYaml));
+  const src = sourcePath(source);
+  if (!src) return;
+  const target = resultPath(src, path.dirname(src), isYaml);
   const pick = await vscode.window.showInformationMessage(message + ' Save the result?', 'Save As');
   if (pick !== 'Save As') return;
   const uri = await vscode.window.showSaveDialog({

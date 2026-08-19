@@ -2,7 +2,7 @@
   "name": "openapi-converter",
   "displayName": "OpenAPI Converter",
   "description": "Convert OpenAPI/Swagger contracts between versions (2.0, 3.0, 3.1, 3.2) with a warning report, and apply [field: value] markers from descriptions into real OpenAPI fields. It invents nothing — only what is in the model lands in the file. Fully local: no network, no telemetry.",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "publisher": "beatahumeniuk",
   "license": "MIT",
   "author": {
@@ -84,7 +84,7 @@
   "scripts": {
     "build": "esbuild src/extension.js --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --minify --alias:node-fetch=./src/no-network-stub.js --alias:node-fetch-h2=./src/no-network-stub.js",
     "vscode:prepublish": "npm run build",
-    "test": "node test/convert-test.js && node test/example-fill-test.js && node test/markers-golden-test.js && node test/convert-markers-test.js",
+    "test": "node test/convert-test.js && node test/example-fill-test.js && node test/markers-golden-test.js && node test/convert-markers-test.js && node test/result-naming-test.js",
     "package": "vsce package --no-dependencies",
     "demo:reset": "node -e \"require('fs').copyFileSync('test/markers-swagger2.input.json','examples/markers-swagger2.json')\" && echo examples/markers-swagger2.json restored"
   },

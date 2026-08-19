@@ -3,6 +3,7 @@ const { Converter: DownConverter } = require('@apiture/openapi-down-convert');
 const { upgrade30to31, modernizeSchemasInDoc } = require('./upgrade30to31');
 const { downgrade30to20 } = require('./downgrade30to20');
 const { downgrade32to31 } = require('./downgrade32to31');
+const { protectRefSiblings } = require('./exampleFill');
 
 const OPENAPI_VERSIONS = {
   '2.0': ['2.0'],
@@ -110,7 +111,8 @@ function detectExactVersion(spec) {
 
 async function to30(spec, from, warn) {
   if (from === '2.0') {
-    const result = await swagger2openapi.convertObj(withDefaultMedia20(spec), { patch: true, warnOnly: true, anchors: true, resolve: false });
+    const prepared = protectRefSiblings(JSON.parse(JSON.stringify(withDefaultMedia20(spec))));
+    const result = await swagger2openapi.convertObj(prepared, { patch: true, warnOnly: true, anchors: true, resolve: false });
     return result.openapi;
   }
   if (from === '3.2') {

@@ -3,6 +3,28 @@
 This file lists user-visible changes to OpenAPI Converter. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.2] - 2026-08-19
+
+### Fixed
+
+- **Convert Version** now offers to save the result next to the file it was
+  converted from. The result document carried only a bare file name, which
+  Windows resolves against the drive root, so Ctrl+S tried to write
+  `C:\name.yaml` and failed with `EPERM: operation not permitted`; only
+  **Save As** got the file onto disk. When the target name would be the source
+  file itself — converting a YAML contract to YAML — the result is named
+  `name.converted.yaml`, so saving cannot overwrite the contract it was made
+  from. With no folder to save into, the result opens as a plain untitled
+  document and Ctrl+S asks where to put it.
+- Markers written next to a `$ref` now survive **Convert Version** from
+  Swagger 2.0. OpenAPI 3.0 ignores anything beside a reference, so the
+  conversion dropped those descriptions with the markers still in them, and the
+  values never reached the converted file. Such a field is now wrapped in a
+  one-element `allOf` before the conversion, exactly as **Apply Markers**
+  already does when it writes a value beside a reference. Only fields whose
+  description actually carries a marker are restructured, and the shared type
+  itself is left alone.
+
 ## [1.2.1] - 2026-08-19
 
 ### Fixed

@@ -142,13 +142,14 @@ function taggedListValue(node) {
 }
 
 function modelExampleIn(node, host, seen) {
-  if (node.example !== undefined) return node.example;
-  const tagged = exampleTagValue(node);
-  if (tagged !== undefined) return tagged;
+  const own = node.example !== undefined ? node.example : exampleTagValue(node);
+  if (own !== undefined) {
+    return isArraySchema(node) && own !== null && !Array.isArray(own) ? [own] : own;
+  }
 
   const items = itemsTarget(node, host);
   if (items) {
-    const listOnItem = taggedListValue(items);
+    const listOnItem = isArraySchema(items) ? null : taggedListValue(items);
     if (listOnItem) return listOnItem;
     const row = modelExample(items, host, seen);
     if (row === undefined) return undefined;

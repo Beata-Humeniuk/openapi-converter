@@ -3,6 +3,16 @@
 This file lists user-visible changes to OpenAPI Converter. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] - 2026-08-19
+
+### Fixed
+
+- A case built from the model now states array fields the way the schema
+  promises them. A single value belonging to an array (`[example: "SMS"]`
+  written on the array) is wrapped into a one-element list instead of being
+  left as a bare string, and a list belonging to an item that is itself an
+  array stays one level down instead of being flattened into the outer list.
+
 ## [1.2.0] - 2026-08-19
 
 ### Added

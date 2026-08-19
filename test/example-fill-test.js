@@ -1198,6 +1198,27 @@ assert(emptyModel.paths['/x'].post.requestBody.content['application/json'].examp
 assert(emptyStats.notApplied.some((n) => /would come out empty/.test(n.reason)), 'it is reported instead');
 assert(/\[requestCase:/.test(emptyModel.paths['/x'].post.description), 'and the marker stays visible');
 
+const modelArrays = {
+  openapi: '3.0.3', info: { title: 'T', version: '1' },
+  paths: { '/x': { post: { operationId: 'p', description: '[requestCase: standard "Std"]',
+    requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Lists' } } } },
+    responses: {} } } },
+  components: { schemas: { Lists: { type: 'object', properties: {
+    onArray:   { type: 'array', items: { type: 'string' }, description: 'One value written on the array. [example: "SMS"]' },
+    onItem:    { type: 'array', items: { type: 'string', description: '[example: "SMS"]' } },
+    listOnItem: { type: 'array', items: { type: 'string', description: '[example: ["SMS", "MAIL"]]' } },
+    matrix:    { type: 'array', items: { type: 'array', items: { type: 'integer' }, description: '[example: [1, 2]]' } }
+  } } } }
+};
+applyMarkers(modelArrays);
+const arraysValue = modelArrays.paths['/x'].post.requestBody.content['application/json'].examples.standard.value;
+assert(JSON.stringify(arraysValue.onArray) === '["SMS"]',
+  'a single value belonging to an array is wrapped in the generated case, as the schema promises a list');
+assert(JSON.stringify(arraysValue.onItem) === '["SMS"]', 'a single value on the item makes a one-element list');
+assert(JSON.stringify(arraysValue.listOnItem) === '["SMS","MAIL"]', 'a list on the item note fills the array itself');
+assert(JSON.stringify(arraysValue.matrix) === '[[1,2]]',
+  'a list belonging to an item that is itself an array stays one level down');
+
 const sharedTwice = modelCaseSpec();
 sharedTwice.components.schemas.OrderRequest.properties.billTo = { $ref: '#/components/schemas/Address' };
 sharedTwice.paths['/orders'].post.description = '[requestCase: standard "Standard order"]';

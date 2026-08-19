@@ -11,7 +11,7 @@
       "/stations": {
         "post": {
           "summary": "Register a station",
-          "description": "Registers a new measurement station. Markers are read from BOTH fields: consumes/produces sit higher up in summary, the rest here. [TODO: write down the daily reading limits]",
+          "description": "Registers a new measurement station. Markers are read from BOTH fields: consumes/produces sit higher up in summary, the rest here. Named example cases need OpenAPI 3.x, so on this 2.0 file both of them wait in the description until the contract is converted. The first one carries no JSON: its value is composed from the [example:] markers on the fields of Station, so a field added later needs no example rewritten by hand. [requestCase: standard \"Standard registration — values from the model\"] [requestCase: maintenance \"Station taken in for maintenance\" {\"serial\": \"ST/2026/000999\", \"status\": \"MAINTENANCE\"}] [TODO: write down the daily reading limits]",
           "parameters": [
             {
               "name": "channel",

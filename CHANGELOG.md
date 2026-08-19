@@ -3,6 +3,21 @@
 This file lists user-visible changes to OpenAPI Converter. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-08-19
+
+### Added
+
+- `[responseCase:]` and `[requestCase:]` can now take their value from the
+  model instead of from JSON written by hand. A case that ends after its name
+  and summary is composed from the `[example:]` values already on the fields of
+  the body schema, following `$ref` and `allOf` and filling one row per array,
+  so a field added to a large request body no longer means editing an example.
+  `[requestCase: <name> "<summary>" #<Schema>]` builds from a named schema
+  instead of the one on the media type. Fields without an example are left out
+  without a word; when no field in the schema carries an example there is
+  nothing to build, and the marker is reported and stays in the description
+  rather than producing an empty case.
+
 ## [1.1.0] - 2026-08-18
 
 ### Added

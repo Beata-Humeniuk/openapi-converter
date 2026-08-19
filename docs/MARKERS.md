@@ -100,6 +100,7 @@ Operation markers can appear in an operation's `description` or `summary`.
 | `[response: default …]` | ✓ | ✓ | ✓ |
 | `[responseCase: <code> <name> …]` | **not applied** | ✓ | ✓ |
 | `[requestCase: <name> …]` | **not applied** | ✓ | ✓ |
+| `[requestCase: <name> "<summary>"]` — value from the model | **not applied** | ✓ | ✓ |
 
 See [`response`](#response) and
 [`responseCase` and `requestCase`](#responsecase-and-requestcase) for the full
@@ -131,7 +132,7 @@ marker remains in the description.
 | `[pattern: "^\\d+$"]` | `^\d+$` |
 | `[pattern: ^\\d+$]` without quotes | Keeps both backslashes. The pattern is reported if it does not match the example. |
 | `[example: "a]b, c"]` | `a]b, c` |
-| `[example: "C:\raporty"]` | Keeps the path as written. |
+| `[example: "C:\reports"]` | Keeps the path as written. |
 | `[example: ["A","B"]]` on an array item | Sets the example on the array. |
 | `[example: X]` on an array | `["X"]` |
 | `[pattern: ...]` on a number | Not applied because `pattern` is only valid for strings. |
@@ -290,8 +291,10 @@ Value rules:
 - The case name comes right after the status code (`responseCase`) or first
   (`requestCase`). It starts with a letter and may go on with letters, digits,
   `_` and `-`.
-- The summary is optional, quoted or unquoted. The example itself is required
-  and must be valid JSON.
+- The summary is optional, quoted or unquoted.
+- The example is either a JSON value written in the marker, or — when the
+  marker ends after the name and summary — built from the model. See
+  [cases built from the model](#cases-built-from-the-model) below.
 - Cases are written in the order the markers appear. Repeating a name
   overwrites that case.
 - A single example set by `[response:]` on the same media type is replaced by
@@ -308,6 +311,32 @@ Value rules:
   is still built from the field values. A case carries the whole body, so a
   field left out of a case is absent from that case — field examples are not
   merged in.
+
+### Cases built from the model
+
+A case that ends after its name and summary takes its value from the model
+instead of from JSON written by hand. This is what a large request body wants:
+the standard case is composed from the `[example:]` values already sitting on
+the fields, so a field added later shows up on the next run of the command
+without anyone editing an example.
+
+```text
+Creates an order.
+[requestCase: standard "Standard order"]
+[requestCase: bulk "Bulk order with a coupon" {"customerId": "C-1", "couponCode": "SPRING10"}]
+[responseCase: 200 confirmed "Confirmed straight away"]
+```
+
+The generated value follows `$ref` and `allOf`, descends into nested objects,
+and puts one composed row inside each array. `[requestCase: … #Name]` builds
+from the named schema instead of the one on the media type — `#Name` and
+`#/components/schemas/Name` both work. A case cannot give both a schema and a
+JSON example; write one or the other.
+
+Nothing is invented: a field with no example of its own is simply left out of
+the generated case, without a word in the report. If no field in the schema
+carries an example, there is nothing to build and the marker is reported and
+left in the description instead of producing an empty case.
 
 ## `exampleBody`
 

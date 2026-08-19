@@ -141,6 +141,19 @@ function normalizeSchemaRef(token) {
   return m ? m[1] : null;
 }
 
+function unquotedTextSpan(text) {
+  const hash = text.search(/\s#/);
+  return Math.min(jsonTailStart(text), hash < 0 ? text.length : hash);
+}
+
+function takeSchemaRef(rest, noun) {
+  if (rest[0] !== '#') return { rest: rest };
+  const token = rest.match(/^(\S+)\s*/);
+  const ref = normalizeSchemaRef(token[1]);
+  if (!ref) return { error: 'the ' + noun + ' must look like #Name or #/components/schemas/Name' };
+  return { ref: ref, rest: rest.slice(token[0].length).trim() };
+}
+
 function parseResponseMarker(raw) {
   const text = String(raw === undefined ? '' : raw).trim();
   const m = text.match(/^(\S+)\s*/);
@@ -158,18 +171,14 @@ function parseResponseMarker(raw) {
       rest = '';
     }
   } else if (rest && rest[0] !== '{' && rest[0] !== '[' && rest[0] !== '#') {
-    const hash = rest.search(/\s#/);
-    const cut = Math.min(jsonTailStart(rest), hash < 0 ? rest.length : hash);
+    const cut = unquotedTextSpan(rest);
     description = rest.slice(0, cut).trim();
     rest = rest.slice(cut).trim();
   }
-  let ref;
-  if (rest[0] === '#') {
-    const token = rest.match(/^(\S+)\s*/);
-    ref = normalizeSchemaRef(token[1]);
-    if (!ref) return { error: 'the body schema must look like #Name or #/components/schemas/Name' };
-    rest = rest.slice(token[0].length).trim();
-  }
+  const taken = takeSchemaRef(rest, 'body schema');
+  if (taken.error) return { error: taken.error };
+  const ref = taken.ref;
+  rest = taken.rest;
   let example;
   if (rest) {
     try { example = JSON.parse(rest); }
@@ -365,13 +374,21 @@ function parseCaseMarker(raw, withCode) {
       summary = unquote(rest.slice(0, span));
       rest = rest.slice(span).trim();
     }
-  } else if (rest && rest[0] !== '{' && rest[0] !== '[') {
-    const cut = jsonTailStart(rest);
+  } else if (rest && rest[0] !== '{' && rest[0] !== '[' && rest[0] !== '#') {
+    const cut = unquotedTextSpan(rest);
     summary = rest.slice(0, cut).trim();
     rest = rest.slice(cut).trim();
   }
 
-  if (!rest) return { error: 'the case ' + name + ' has no example — add a JSON object or list' };
+  const taken = takeSchemaRef(rest, 'model schema');
+  if (taken.error) return { error: taken.error };
+  const ref = taken.ref;
+  rest = taken.rest;
+
+  if (!rest) return { code: code, name: name, summary: summary, ref: ref, fromModel: true };
+  if (ref) {
+    return { error: 'the case ' + name + ' gives both a schema and an example — use one or the other' };
+  }
   let value;
   try { value = JSON.parse(rest); }
   catch (e) { return { error: 'the example for case ' + name + ' is not valid JSON' }; }

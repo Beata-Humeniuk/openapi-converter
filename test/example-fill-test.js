@@ -1112,4 +1112,109 @@ const nulNoType = (() => {
 })();
 assert(nulNoType.type === 'null', '3.1 with no declared type: null becomes the type');
 
+const modelCaseSpec = () => ({
+  openapi: '3.0.3', info: { title: 'T', version: '1' },
+  paths: { '/orders': { post: { operationId: 'createOrder',
+    description: 'Creates an order.\n' +
+      '[requestCase: standard "Standard order"]\n' +
+      '[requestCase: bulk "Bulk order" {"customerId": "C-1", "items": [{"sku": "S-9"}]}]\n' +
+      '[responseCase: 200 ok "Confirmed"]',
+    requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/OrderRequest' } } } },
+    responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } } } } } },
+  components: { schemas: {
+    OrderRequest: { type: 'object', properties: {
+      customerId: { type: 'string', description: 'Reference. [example: "C-1"]' },
+      note:       { type: 'string', description: 'No example here.' },
+      shipTo:     { $ref: '#/components/schemas/Address' },
+      items:      { type: 'array', items: { type: 'object', properties: {
+        sku: { type: 'string', description: '[example: "S-1"]' },
+        qty: { type: 'integer', description: '[example: 1]' } } } },
+      alerts:     { type: 'array', items: { type: 'string', description: '[example: ["SMS", "MAIL"]]' } }
+    } },
+    Address: { type: 'object', properties: { city: { type: 'string', description: '[example: "Lisbon"]' } } },
+    Order: { type: 'object', properties: { orderId: { type: 'string', description: '[example: "ORD-1"]' } } }
+  } }
+});
+const modelCase = modelCaseSpec();
+const modelStats = applyMarkers(modelCase);
+const modelOp = modelCase.paths['/orders'].post;
+const modelReq = modelOp.requestBody.content['application/json'].examples;
+assert(JSON.stringify(modelReq.standard.value) ===
+  '{"customerId":"C-1","shipTo":{"city":"Lisbon"},"items":[{"sku":"S-1","qty":1}],"alerts":["SMS","MAIL"]}',
+  'a case with no JSON is built from the field examples of the body schema, through $ref and into array items');
+assert(modelReq.standard.value.note === undefined, 'a field with no example is left out, silently');
+assert(modelStats.notApplied.length === 0, 'and nothing is reported for it');
+assert(modelReq.standard.summary === 'Standard order', 'the summary still describes the generated case');
+assert(Object.keys(modelReq).join() === 'standard,bulk', 'generated and hand-written cases sit side by side, in order');
+assert(JSON.stringify(modelReq.bulk.value) === '{"customerId":"C-1","items":[{"sku":"S-9"}]}',
+  'the hand-written case keeps exactly what was written');
+assert(JSON.stringify(modelOp.responses['200'].content['application/json'].examples.ok.value) === '{"orderId":"ORD-1"}',
+  '[responseCase:] builds from the model the same way');
+assert(modelCase.components.schemas.OrderRequest.properties.customerId.example === 'C-1',
+  'the field markers are still applied to the schema itself');
+assert(modelOp.description === 'Creates an order.', 'applied case markers leave the description');
+
+const modelSnapshot = JSON.stringify(modelCase);
+applyMarkers(modelCase);
+assert(JSON.stringify(modelCase) === modelSnapshot, 'cases built from the model are idempotent');
+
+const refCase = modelCaseSpec();
+refCase.paths['/orders'].post.description = '[requestCase: fromAddress "Just the address" #Address]';
+applyMarkers(refCase);
+assert(JSON.stringify(refCase.paths['/orders'].post.requestBody.content['application/json']
+  .examples.fromAddress.value) === '{"city":"Lisbon"}',
+  '#Schema builds the case from the named schema instead of the one on the media type');
+
+const refPointer = modelCaseSpec();
+refPointer.paths['/orders'].post.description = '[requestCase: a "X" #/components/schemas/Address]';
+applyMarkers(refPointer);
+assert(refPointer.paths['/orders'].post.requestBody.content['application/json'].examples.a.value.city === 'Lisbon',
+  'a full JSON pointer names the schema too');
+
+const bothForms = modelCaseSpec();
+bothForms.paths['/orders'].post.description = '[requestCase: a "X" #Address {"city": "Porto"}]';
+const bothStats = applyMarkers(bothForms);
+assert(bothForms.paths['/orders'].post.requestBody.content['application/json'].examples === undefined,
+  'a schema and an example in one case is refused, not half-applied');
+assert(bothStats.notApplied.some((n) => /both a schema and an example/.test(n.reason)), 'and reported with a reason');
+assert(/\[requestCase:/.test(bothForms.paths['/orders'].post.description), 'the refused marker stays visible');
+
+const missingRef = modelCaseSpec();
+missingRef.paths['/orders'].post.description = '[requestCase: a "X" #DoesNotExist]';
+const missingStats = applyMarkers(missingRef);
+assert(missingStats.notApplied.some((n) => /DoesNotExist does not exist/.test(n.reason)),
+  'a schema that is not in the file is reported');
+
+const emptyModel = {
+  openapi: '3.0.3', info: { title: 'T', version: '1' },
+  paths: { '/x': { post: { operationId: 'p', description: '[requestCase: standard "Std"]',
+    requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Bare' } } } },
+    responses: {} } } },
+  components: { schemas: { Bare: { type: 'object', properties: { a: { type: 'string' } } } } }
+};
+const emptyStats = applyMarkers(emptyModel);
+assert(emptyModel.paths['/x'].post.requestBody.content['application/json'].examples === undefined,
+  'a model with no examples produces no empty case');
+assert(emptyStats.notApplied.some((n) => /would come out empty/.test(n.reason)), 'it is reported instead');
+assert(/\[requestCase:/.test(emptyModel.paths['/x'].post.description), 'and the marker stays visible');
+
+const sharedTwice = modelCaseSpec();
+sharedTwice.components.schemas.OrderRequest.properties.billTo = { $ref: '#/components/schemas/Address' };
+sharedTwice.paths['/orders'].post.description = '[requestCase: standard "Standard order"]';
+applyMarkers(sharedTwice);
+const twiceValue = sharedTwice.paths['/orders'].post.requestBody.content['application/json'].examples.standard.value;
+assert(twiceValue.shipTo.city === 'Lisbon' && twiceValue.billTo.city === 'Lisbon',
+  'two fields of the same shared type both get the example — the cycle guard does not swallow the second');
+
+const modelCase2 = {
+  swagger: '2.0', info: { title: 'T', version: '1' },
+  paths: { '/x': { post: { operationId: 'p', description: '[requestCase: standard "Std"]',
+    parameters: [{ name: 'body', in: 'body', schema: { $ref: '#/definitions/B' } }], responses: {} } } },
+  definitions: { B: { type: 'object', properties: { a: { type: 'string', description: '[example: "X"]' } } } }
+};
+const modelCase2Stats = applyMarkers(modelCase2);
+assert(modelCase2Stats.notApplied.some((n) => /OpenAPI 3\.x/.test(n.reason)),
+  'Swagger 2.0: a case built from the model is refused like any other case');
+
+
 console.log('example-fill-test OK');

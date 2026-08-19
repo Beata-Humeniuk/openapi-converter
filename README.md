@@ -65,6 +65,14 @@ Creates an order.
 [responseCase: 200 awaitingPayment "Waiting for payment" {"orderId": "ORD-2"}]
 ```
 
+A case written without a JSON value takes it from the model — the standard case
+of a large request body is composed from the `[example:]` values already on the
+fields, so adding a field does not mean editing an example by hand.
+
+```text
+[requestCase: standard "Standard order"]
+```
+
 Markers add to what the file already has: status codes that came from a
 generator stay as they are, and a marker naming an existing code changes only
 the parts it gives.

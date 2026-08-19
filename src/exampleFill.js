@@ -95,13 +95,17 @@ function setWholeExample(node, value, wrapRefs, stats) {
   stats.examplesAdded += 1;
 }
 
+function resolveRef(node, host) {
+  return (node.$ref && host && host[refName(node.$ref)]) || null;
+}
+
 function objectTarget(node, host, seen) {
   if (!node || typeof node !== 'object') return null;
   if (node.properties) return node;
   const visited = seen || new Set();
   if (visited.has(node)) return null;
   visited.add(node);
-  const named = node.$ref && host && host[refName(node.$ref)];
+  const named = resolveRef(node, host);
 
   if (named) {
     const inner = objectTarget(named, host, visited);
@@ -117,8 +121,58 @@ function objectTarget(node, host, seen) {
 function itemsTarget(node, host) {
   if (!node || typeof node !== 'object') return null;
   if (node.items) return node.items;
-  const named = node.$ref && host && host[refName(node.$ref)];
+  const named = resolveRef(node, host);
   return named && named.items ? named.items : null;
+}
+
+function collectProperties(node, host, out, seen) {
+  if (!node || typeof node !== 'object' || seen.has(node)) return;
+  seen.add(node);
+  const named = resolveRef(node, host);
+  if (named) collectProperties(named, host, out, seen);
+  for (const part of node.allOf || []) collectProperties(part, host, out, seen);
+  for (const [key, prop] of Object.entries(node.properties || {})) {
+    if (!(key in out)) out[key] = prop;
+  }
+}
+
+function taggedListValue(node) {
+  const tag = findTag(node, 'example');
+  return tag ? jsonList(tag.raw) : null;
+}
+
+function modelExampleIn(node, host, seen) {
+  if (node.example !== undefined) return node.example;
+  const tagged = exampleTagValue(node);
+  if (tagged !== undefined) return tagged;
+
+  const items = itemsTarget(node, host);
+  if (items) {
+    const listOnItem = taggedListValue(items);
+    if (listOnItem) return listOnItem;
+    const row = modelExample(items, host, seen);
+    if (row === undefined) return undefined;
+    return Array.isArray(row) && !isArraySchema(items) ? row : [row];
+  }
+  const named = resolveRef(node, host);
+  if (named) return modelExample(named, host, seen);
+
+  const props = {};
+  collectProperties(node, host, props, new Set());
+  const out = {};
+  for (const [key, prop] of Object.entries(props)) {
+    const value = modelExample(prop, host, seen);
+    if (value !== undefined) out[key] = value;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function modelExample(node, host, seen) {
+  if (!node || typeof node !== 'object' || seen.has(node)) return undefined;
+  seen.add(node);
+  const value = modelExampleIn(node, host, seen);
+  seen.delete(node);
+  return value;
 }
 
 function setLeafExample(prop, value, wrapRefs, stats) {
@@ -358,14 +412,25 @@ function applyCaseMarker(op, parsed, isResponse, isSwagger2, stats, host, label)
   if (spot.error) return spot.error;
   const media = spot.media;
 
+  let value = parsed.value;
+  if (parsed.fromModel) {
+    const schema = parsed.ref ? (host && host[parsed.ref]) : media.schema;
+    if (parsed.ref && !schema) return 'the model schema ' + parsed.ref + ' does not exist in the file';
+    if (!schema) return 'the case ' + parsed.name + ' has nothing to build from — the media type carries no schema';
+    value = modelExample(schema, host, new Set());
+    if (value === undefined) {
+      return 'the case ' + parsed.name + ' would come out empty — no field in the model carries an example';
+    }
+  }
+
   if (!media.examples || typeof media.examples !== 'object') media.examples = {};
   delete media.example;
   const entry = {};
   if (parsed.summary) entry.summary = parsed.summary;
-  entry.value = parsed.value;
+  entry.value = value;
   media.examples[parsed.name] = entry;
   stats.examplesAdded += 1;
-  reportUnknownExampleKeys(parsed.value, media.schema, host,
+  reportUnknownExampleKeys(value, media.schema, host,
     (label ? label + ' ' : '') + spot.at + ' [' + parsed.name + ']', stats);
   return null;
 }
@@ -446,12 +511,16 @@ function applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label, h
   if (assignedHere.length) op[key] = assignedHere[0];
 }
 
-function taggedFieldValue(schema, wanted) {
-  for (const tag of scanTags(String((schema && schema.description) || ''))) {
-    if (String(tag.key).toLowerCase() !== wanted) continue;
-    return coerceTagValue('example', tag.raw, schema || {});
+function findTag(node, wanted) {
+  for (const tag of scanTags(String((node && node.description) || ''))) {
+    if (String(tag.key).toLowerCase() === wanted) return tag;
   }
-  return undefined;
+  return null;
+}
+
+function taggedFieldValue(schema, wanted) {
+  const tag = findTag(schema, wanted);
+  return tag ? coerceTagValue('example', tag.raw, schema || {}) : undefined;
 }
 
 function exampleTagValue(schema) { return taggedFieldValue(schema, 'example'); }

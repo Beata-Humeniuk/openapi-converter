@@ -8,7 +8,7 @@ const source20 = () => ({
   swagger: '2.0', info: { title: 'T', version: '1' }, produces: ['application/json'],
   paths: { '/o': { post: { operationId: 'c',
     description: 'Op.\n[response: 404 "Not found" #E]\n[response: 4XX "Client error" #E]\n' +
-      '[responseCase: 404 caseA "Case A" {"code": "X"}]',
+      '[responseCase: [code: 404] [name: caseA] [summary: Case A] [exampleBody: {"code": "X"}]]',
     responses: { '200': { description: 'OK' } } } } },
   definitions: {
     E: { type: 'object', properties: { code: { type: 'string' } } },
@@ -58,7 +58,7 @@ const field = (spec) => (spec.definitions || spec.components.schemas).P.properti
     openapi: '3.0.3', info: { title: 'T', version: '1' },
     paths: { '/o': { post: { operationId: 'c',
       description: 'Op.\n[response: 404 "Not found" #E]\n[response: 4XX "ErrorBody"]\n' +
-        '[responseCase: 404 a "Case" {"code": "X"}]',
+        '[responseCase: [code: 404] [name: a] [summary: Case] [exampleBody: {"code": "X"}]]',
       responses: { '200': { description: 'OK' } } } } },
     components: { schemas: {
       E: { type: 'object', properties: { code: { type: 'string' } } },

@@ -85,7 +85,11 @@ turns the waiting `[writeOnly]` back into the real field. That is also how a
 
 ## Operation markers
 
-Operation markers can appear in an operation's `description` or `summary`.
+Operation markers can appear in an operation's `description` or `summary`. Both
+fields are read the same way, and an applied marker is taken out of whichever
+one it stood in — so it makes no difference which of the two the contract's
+generator writes them into. Cases split between the two fields are ordered as
+one set, the summary being read first.
 
 | Marker | Swagger 2.0 | OpenAPI 3.0 | OpenAPI 3.1 / 3.2 |
 |---|---|---|---|
@@ -98,9 +102,11 @@ Operation markers can appear in an operation's `description` or `summary`.
 | `[response: <code> …]` — exact code | `schema` + `examples` | `content` | `content` |
 | `[response: 4XX …]` — code range | **not applied** | ✓ | ✓ |
 | `[response: default …]` | ✓ | ✓ | ✓ |
-| `[responseCase: <code> <name> …]` | **not applied** | ✓ | ✓ |
-| `[requestCase: <name> …]` | **not applied** | ✓ | ✓ |
-| `[requestCase: <name> "<summary>"]` — value from the model | **not applied** | ✓ | ✓ |
+| `[responseCase: [code: …] [name: …] …]` | **not applied** | ✓ | ✓ |
+| `[requestCase: [name: …] …]` | **not applied** | ✓ | ✓ |
+| `[order: <n>]` inside a case — sets the order | **not applied** | ✓ | ✓ |
+| a case with no `[exampleBody:]` — value from the model | **not applied** | ✓ | ✓ |
+| `[required]` inside a case — required fields only | **not applied** | ✓ | ✓ |
 
 See [`response`](#response) and
 [`responseCase` and `requestCase`](#responsecase-and-requestcase) for the full
@@ -146,10 +152,10 @@ Swagger 2.0 and OpenAPI 3.0 ignore fields next to `$ref`. To keep marker values,
 the extension wraps the reference in `allOf`:
 
 ```yaml
-amount:
+quantity:
   allOf:
-    - $ref: '#/definitions/Shared_Amount'
-  description: Limit amount
+    - $ref: '#/definitions/Shared_Quantity'
+  description: Limit quantity
   example: "5000.00"
 ```
 
@@ -164,9 +170,9 @@ After the status code you can give a description, a body schema (`#Name`),
 and a JSON example — each part is optional:
 
 ```text
-Creates a payment.
-[response: 201 "Payment created" #Payment {"id": "PAY-001", "status": "NEW"}]
-[response: 409 "A payment with this ID already exists" #Error]
+Creates a station.
+[response: 201 "Station created" #Station {"id": "ST-001", "status": "NEW"}]
+[response: 409 "A station with this ID already exists" #Error]
 [response: 503]
 ```
 
@@ -175,16 +181,16 @@ becomes:
 ```yaml
 responses:
   '201':
-    description: Payment created
+    description: Station created
     content:
       application/json:
         schema:
-          $ref: '#/components/schemas/Payment'
+          $ref: '#/components/schemas/Station'
         example:
-          id: PAY-001
+          id: ST-001
           status: NEW
   '409':
-    description: A payment with this ID already exists
+    description: A station with this ID already exists
     content:
       application/json:
         schema:
@@ -199,12 +205,12 @@ to `schema` and the example to `examples`, under the first `produces` type:
 ```yaml
 responses:
   '201':
-    description: Payment created
+    description: Station created
     schema:
-      $ref: '#/definitions/Payment'
+      $ref: '#/definitions/Station'
     examples:
       application/json:
-        id: PAY-001
+        id: ST-001
         status: NEW
 ```
 
@@ -238,19 +244,20 @@ Value rules:
 - A marker that cannot be applied — an invalid code, broken JSON, an unknown
   schema name, a code range in Swagger 2.0 — stays in the description and is
   listed after the command finishes, with the operation and the reason, for
-  example `POST /payments — the body schema Eror does not exist in the file`.
+  example `POST /stations — the body schema Eror does not exist in the file`.
 
 ## `responseCase` and `requestCase`
 
 One response code, or one request body, can carry several named examples —
-one per case you want to document. Each marker adds one case:
+one per case you want to document. Each marker adds one case, and every part of
+it is written the same way the markers themselves are, as `[part: value]`:
 
 ```text
 Creates an order.
-[requestCase: minimal "Case 1 - required fields only" {"customerId": "C-1"}]
-[requestCase: withCoupon "Case 2 - with a discount coupon" {"customerId": "C-1", "couponCode": "SPRING10"}]
-[responseCase: 200 confirmed "Case A - confirmed straight away" {"orderId": "ORD-1", "status": "CONFIRMED"}]
-[responseCase: 200 awaitingPayment "Case B - waiting for payment" {"orderId": "ORD-2", "status": "AWAITING_PAYMENT"}]
+[requestCase: [name: minimal] [summary: Required fields only] [exampleBody: {"customerId": "C-1"}]]
+[requestCase: [name: withCoupon] [summary: With a discount coupon] [exampleBody: {"customerId": "C-1", "couponCode": "SPRING10"}]]
+[responseCase: [code: 200] [name: confirmed] [summary: Confirmed straight away] [exampleBody: {"orderId": "ORD-1", "status": "CONFIRMED"}]]
+[responseCase: [code: 200] [name: awaitingStock] [summary: Waiting for stock] [exampleBody: {"orderId": "ORD-2", "status": "AWAITING_STOCK"}]]
 ```
 
 becomes:
@@ -261,10 +268,10 @@ requestBody:
     application/json:
       examples:
         minimal:
-          summary: Case 1 - required fields only
+          summary: Required fields only
           value: { customerId: C-1 }
         withCoupon:
-          summary: Case 2 - with a discount coupon
+          summary: With a discount coupon
           value: { customerId: C-1, couponCode: SPRING10 }
 responses:
   '200':
@@ -272,31 +279,70 @@ responses:
       application/json:
         examples:
           confirmed:
-            summary: Case A - confirmed straight away
+            summary: Confirmed straight away
             value: { orderId: ORD-1, status: CONFIRMED }
-          awaitingPayment:
-            summary: Case B - waiting for payment
-            value: { orderId: ORD-2, status: AWAITING_PAYMENT }
+          awaitingStock:
+            summary: Waiting for stock
+            value: { orderId: ORD-2, status: AWAITING_STOCK }
 ```
 
 Swagger UI puts the cases in a dropdown, so a reader can switch between them.
 It labels each entry with the case summary, falling back to the case name when
 the case has no summary.
 
+### The parts of a case
+
+| Part | Means |
+|---|---|
+| `[code: 200]` | the status code the case belongs to — `[responseCase:]` only, and required there |
+| `[name: confirmed]` | the key the case gets in `examples:` — required |
+| `[summary: Confirmed straight away]` | the line Swagger UI shows in its dropdown |
+| `[schema: Address]` | build the value from this model schema instead of the body one |
+| `[order: 2]` | where the case lands among the others — see [ordering the cases](#ordering-the-cases) |
+| `[required]` | build the value from the required fields alone — see [required fields only](#required-fields-only) |
+| `[exampleBody: {…}]` | the value, written by hand |
+
+Only the marker name comes first. After it the parts may stand in any order,
+because each one says for itself what it is, so all three of these are read the
+same way:
+
+```text
+[responseCase: [code: 200] [name: confirmed] [summary: Confirmed] [order: 1]]
+[responseCase: [order: 1] [summary: Confirmed] [code: 200] [name: confirmed]]
+[responseCase: [name: confirmed] [order: 1] [code: 200] [summary: Confirmed]]
+```
+
+The first reads best and the documentation writes them that way throughout, but
+nothing depends on it — there is no order to memorise, and adding a part to a
+marker later cannot put anything in the wrong place.
+
+Rules for the parts:
+
+- Nothing is quoted. A value runs to its closing bracket, so
+  `[summary: Order for 2 items, 10% off]` needs no quotes and keeps its commas,
+  percent signs and dashes. This matters where the contract is generated from a
+  modelling tool, because the whole description ends up inside one string in
+  the file, and quotes there come out escaped and hard to read.
+- Every part may be given once. A part written twice is refused and reported,
+  rather than one of the two quietly winning.
+- A part the marker does not know — a misspelled `[ordre: 2]` — is named in the
+  report instead of being ignored.
+- Text that is not inside `[…]` is refused the same way. This is what the
+  syntax used up to 1.2.0 —
+  `[requestCase: minimal "Required fields only" {…}]` — now runs into: it stays
+  in the description and is reported, with the shape a case has today.
+- `[schema:]` takes `Address`, `#Address` or `#/components/schemas/Address`.
+
 Value rules:
 
 - **OpenAPI 3.x only.** Swagger 2.0 has one example per media type and no place
   for a name, so the marker is not applied: it stays in the description and is
   listed in the report. Convert the file to 3.x first, then apply the markers.
-- The case name comes right after the status code (`responseCase`) or first
-  (`requestCase`). It starts with a letter and may go on with letters, digits,
-  `_` and `-`.
-- The summary is optional, quoted or unquoted.
-- The example is either a JSON value written in the marker, or — when the
-  marker ends after the name and summary — built from the model. See
+- The value is either the JSON in `[exampleBody:]`, or — when the case has no
+  `[exampleBody:]` — built from the model. See
   [cases built from the model](#cases-built-from-the-model) below.
-- Cases are written in the order the markers appear. Repeating a name
-  overwrites that case.
+- Without `[order:]`, cases come out in the order the markers appear. Repeating
+  a name overwrites that case.
 - A single example set by `[response:]` on the same media type is replaced by
   the named cases, because OpenAPI 3.x forbids `example` and `examples` side by
   side.
@@ -312,31 +358,97 @@ Value rules:
   field left out of a case is absent from that case — field examples are not
   merged in.
 
-### Cases built from the model
+### Ordering the cases
 
-A case that ends after its name and summary takes its value from the model
-instead of from JSON written by hand. This is what a large request body wants:
-the standard case is composed from the `[example:]` values already sitting on
-the fields, so a field added later shows up on the next run of the command
-without anyone editing an example.
+`[order: <n>]` sets where a case lands among the others, whatever order the
+markers were written in. Swagger UI lists the cases in that order in its
+dropdown, so the reader meets them the way you meant them to be read — and a
+case added later can be slotted into the middle without moving any text around.
 
 ```text
 Creates an order.
-[requestCase: standard "Standard order"]
-[requestCase: bulk "Bulk order with a coupon" {"customerId": "C-1", "couponCode": "SPRING10"}]
-[responseCase: 200 confirmed "Confirmed straight away"]
+[requestCase: [name: withCoupon] [summary: With a discount coupon] [order: 2]]
+[requestCase: [name: minimal] [summary: Required fields only] [order: 1] [required]]
+[responseCase: [code: 200] [name: awaitingStock] [summary: Waiting for stock] [order: 2]]
+[responseCase: [code: 200] [name: confirmed] [summary: Confirmed straight away] [order: 1]]
+```
+
+puts `minimal` before `withCoupon` in the request body, and `confirmed` before
+`awaitingStock` under `200`.
+
+Ordering rules:
+
+- The order starts at 1. `[order: 0]`, or anything that is not a whole number,
+  is refused and the marker is reported.
+- The request body is ordered on its own, and so is every response code. Both
+  `[responseCase: [code: 200] … [order: 1]]` and
+  `[responseCase: [code: 400] … [order: 1]]` are the first case of their own
+  code, and neither collides with `[requestCase: … [order: 1]]`.
+- A case with no `[order:]` follows the highest order given so far, so leaving
+  it out entirely keeps the order the markers were written in. Mixing works the
+  same way: after `[order: 5]`, the next case without one is sixth.
+- Two cases sharing one order keep the order they were written in.
+- The numbers are not slots to be filled: 1, 5, 20 simply come out in that
+  order.
+- `[order:]` stays in the description marker and is never written into the
+  contract — the file gets the case name, its summary and its value, in the
+  order asked for.
+- Examples already sitting on the media type in the file, which no marker
+  names, stay in front of the cases the markers order.
+
+### Cases built from the model
+
+A case with no `[exampleBody:]` takes its value from the model instead of from
+an example written by hand. This is what a large request body wants: the
+standard case is composed from the `[example:]` values already sitting on the
+fields, so a field added later shows up on the next run of the command without
+anyone editing an example.
+
+```text
+Creates an order.
+[requestCase: [name: standard] [summary: Standard order]]
+[requestCase: [name: bulk] [summary: Bulk order with a coupon] [exampleBody: {"customerId": "C-1", "couponCode": "SPRING10"}]]
+[responseCase: [code: 200] [name: confirmed] [summary: Confirmed straight away]]
 ```
 
 The generated value follows `$ref` and `allOf`, descends into nested objects,
-and puts one composed row inside each array. `[requestCase: … #Name]` builds
-from the named schema instead of the one on the media type — `#Name` and
-`#/components/schemas/Name` both work. A case cannot give both a schema and a
-JSON example; write one or the other.
+and puts one composed row inside each array. `[schema: Name]` builds from the
+named schema instead of the one on the media type. A case cannot give both
+`[schema:]` and `[exampleBody:]`; write one or the other.
 
 Nothing is invented: a field with no example of its own is simply left out of
 the generated case, without a word in the report. If no field in the schema
 carries an example, there is nothing to build and the marker is reported and
 left in the description instead of producing an empty case.
+
+### Required fields only
+
+`[required]` builds the case from the model the same way, but only from the
+fields the schema states as `required`. This is the smallest body the contract
+accepts — the case a reader copies to see what a call needs at minimum, next to
+a full one that shows everything it can carry.
+
+```text
+Creates an order.
+[requestCase: [name: minimal] [summary: Required fields only] [order: 1] [required]]
+[requestCase: [name: full] [summary: Everything an order can carry] [order: 2]]
+[responseCase: [code: 200] [name: confirmed] [summary: Confirmed] [required]]
+```
+
+- `[required]` replaces `[exampleBody:]`, it does not accompany one. Giving
+  both is refused and reported: a case has either an example written by hand or
+  a rule for building one.
+- It reaches every level: a nested object keeps its own required fields, and a
+  row inside an array keeps the required fields of the item schema. `[required]`
+  and `[schema:]` combine —
+  `[requestCase: [name: a] [schema: Address] [required]]` takes the required
+  fields of the named schema.
+- The values still come from the `[example:]` markers on the fields; a required
+  field with no example is left out just as it is in a full case. When no
+  required field carries an example — or the schema states no required field at
+  all — there is nothing to build, and the marker is reported and stays in the
+  description.
+- `[required]` takes no value. `[required: yes]` is refused.
 
 ## `exampleBody`
 
@@ -344,7 +456,7 @@ left in the description instead of producing an empty case.
 value to the matching field. It follows `allOf` and `$ref` references.
 
 ```text
-Details [exampleBody: {"channel": "MAIL", "limit": {"amount": "1000.00"}}]
+Details [exampleBody: {"channel": "MAIL", "limit": {"reading": "1000.00"}}]
 ```
 
 Unknown keys are skipped and listed after the command finishes.

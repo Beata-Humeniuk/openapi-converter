@@ -61,16 +61,21 @@ body, which Swagger UI shows in a dropdown:
 ```text
 Creates an order.
 [response: 404 "Order not found" #ApiError {"code": "NOT_FOUND"}]
-[responseCase: 200 confirmed "Confirmed straight away" {"orderId": "ORD-1"}]
-[responseCase: 200 awaitingPayment "Waiting for payment" {"orderId": "ORD-2"}]
+[responseCase: [code: 200] [name: confirmed] [summary: Confirmed straight away] [exampleBody: {"orderId": "ORD-1"}]]
+[responseCase: [code: 200] [name: awaitingStock] [summary: Waiting for stock] [exampleBody: {"orderId": "ORD-2"}]]
 ```
 
-A case written without a JSON value takes it from the model — the standard case
-of a large request body is composed from the `[example:]` values already on the
-fields, so adding a field does not mean editing an example by hand.
+Every part of a case is written the same way the markers themselves are, as
+`[part: value]`, so nothing has to be quoted and the parts may stand in any
+order — only the marker name comes first. A case with no `[exampleBody:]` takes
+its value from the model: the standard case of a large request body is composed
+from the `[example:]` values already on the fields, so adding a field does not
+mean editing an example by hand. `[required]` narrows it to the required fields
+alone, and `[order:]` sets where each case lands in the dropdown:
 
 ```text
-[requestCase: standard "Standard order"]
+[requestCase: [name: minimal] [summary: Required fields only] [order: 1] [required]]
+[requestCase: [name: standard] [summary: Standard order] [order: 2]]
 ```
 
 Markers add to what the file already has: status codes that came from a

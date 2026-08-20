@@ -349,50 +349,131 @@ function coerceTagValue(kind, raw, node, host) {
   }
 }
 
+const CASE_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
+const CASE_PARTS = 'name, code, summary, order, schema, required and exampleBody';
+
+function caseSchemaRef(raw) {
+  const m = String(raw === undefined ? '' : raw).trim()
+    .match(/^#?(?:\/?(?:definitions|components\/schemas)\/)?([^/\s]+)$/);
+  return m ? m[1] : null;
+}
+
+function readCasePart(got, key, raw, who) {
+  const value = raw === undefined ? undefined : String(raw).trim();
+
+  if (key === 'required') {
+    if (value !== undefined) return 'the [required] of ' + who + ' takes no value — write it as [required]';
+    got.requiredOnly = true;
+    return null;
+  }
+  if (value === undefined || !value) return 'the [' + key + '] of ' + who + ' carries no value';
+
+  switch (key) {
+    case 'name': {
+      const name = unquote(value);
+      if (!CASE_NAME.test(name)) {
+        return 'the case name ' + name + ' must start with a letter and go on with letters, digits, _ or -';
+      }
+      got.name = name;
+      return null;
+    }
+    case 'code': {
+      const code = normalizeResponseCode(value);
+      if (!code) return 'the [code] of ' + who + ' must be a status code — 100-599, a range such as 4XX, or default';
+      got.code = code;
+      return null;
+    }
+    case 'summary':
+      got.summary = unquote(value);
+      return null;
+    case 'order': {
+      if (!/^\d+$/.test(value) || parseInt(value, 10) < 1) {
+        return 'the [order] of ' + who + ' must be a whole number, 1 or greater';
+      }
+      got.order = parseInt(value, 10);
+      return null;
+    }
+    case 'schema': {
+      const ref = caseSchemaRef(value);
+      if (!ref) return 'the [schema] of ' + who + ' must name one schema, such as [schema: Address]';
+      got.ref = ref;
+      return null;
+    }
+    default: {
+      try { got.value = JSON.parse(value); }
+      catch (e) { return 'the [exampleBody] of ' + who + ' is not valid JSON'; }
+      return null;
+    }
+  }
+}
+
 function parseCaseMarker(raw, withCode) {
   const text = String(raw === undefined ? '' : raw).trim();
-  let rest = text;
-  let code;
-  if (withCode) {
-    const m = rest.match(/^(\S+)\s*/);
-    code = m && normalizeResponseCode(m[1]);
-    if (!code) return { error: 'the value must start with a status code — 100-599, a range such as 4XX, or default' };
-    rest = rest.slice(m[0].length).trim();
-  }
-  const n = rest.match(/^([A-Za-z][A-Za-z0-9_-]*)\s*/);
-  if (!n) {
-    const sample = withCode ? 'responseCase: 200 ' : 'requestCase: ';
-    return { error: 'the case needs a name, for example [' + sample + 'confirmed {...}]' };
-  }
-  const name = n[1];
-  rest = rest.slice(n[0].length).trim();
+  const tags = scanTags(text);
+  const got = {};
+  const seen = new Set();
+  const who = () => 'case ' + (got.name || 'marker');
 
-  let summary;
-  if (rest[0] === '"') {
-    const span = quotedSpan(rest);
-    if (span) {
-      summary = unquote(rest.slice(0, span));
-      rest = rest.slice(span).trim();
+  if (!tags.length) {
+    const sample = withCode ? '[responseCase: [code: 200] [name: confirmed] …]' : '[requestCase: [name: minimal] …]';
+    return { error: 'the case marker needs a [name] — every part of a case is written as [part: value], as in ' + sample };
+  }
+
+  for (const tag of tags) {
+    const key = String(tag.key).toLowerCase();
+    if (key === 'name') {
+      const problem = readCasePart(got, key, tag.raw, who());
+      if (problem) return { error: problem };
+      seen.add(key);
     }
-  } else if (rest && rest[0] !== '{' && rest[0] !== '[' && rest[0] !== '#') {
-    const cut = unquotedTextSpan(rest);
-    summary = rest.slice(0, cut).trim();
-    rest = rest.slice(cut).trim();
+  }
+  for (const tag of tags) {
+    const key = String(tag.key).toLowerCase();
+    if (key === 'name') continue;
+    if (!/^(code|summary|order|schema|required|examplebody)$/.test(key)) {
+      return { error: 'the ' + who() + ' does not know the part [' + tag.key + '] — a case takes ' + CASE_PARTS };
+    }
+    if (seen.has(key)) return { error: 'the ' + who() + ' gives [' + tag.key + '] twice' };
+    seen.add(key);
+    const problem = readCasePart(got, key, tag.raw, who());
+    if (problem) return { error: problem };
+  }
+  if (tags.filter((t) => String(t.key).toLowerCase() === 'name').length > 1) {
+    return { error: 'the ' + who() + ' gives [name] twice' };
   }
 
-  const taken = takeSchemaRef(rest, 'model schema');
-  if (taken.error) return { error: taken.error };
-  const ref = taken.ref;
-  rest = taken.rest;
-
-  if (!rest) return { code: code, name: name, summary: summary, ref: ref, fromModel: true };
-  if (ref) {
-    return { error: 'the case ' + name + ' gives both a schema and an example — use one or the other' };
+  let loose = text;
+  for (const tag of tags.slice().reverse()) loose = loose.slice(0, tag.start) + loose.slice(tag.end);
+  loose = loose.trim();
+  if (loose) {
+    const word = loose.match(/^\S+/)[0];
+    return { error: 'the ' + who() + ' does not know what ' + word +
+      ' means — every part of a case is written as [part: value]' };
   }
-  let value;
-  try { value = JSON.parse(rest); }
-  catch (e) { return { error: 'the example for case ' + name + ' is not valid JSON' }; }
-  return { code: code, name: name, summary: summary, value: value };
+
+  if (!got.name) {
+    const sample = withCode ? '[responseCase: [code: 200] [name: confirmed] …]' : '[requestCase: [name: minimal] …]';
+    return { error: 'the case marker needs a [name] — ' + sample };
+  }
+  if (withCode && !got.code) {
+    return { error: 'the ' + who() + ' needs a [code] — 100-599, a range such as 4XX, or default' };
+  }
+  if (!withCode && got.code) {
+    return { error: 'the ' + who() + ' gives a [code], but a request case belongs to the body, not to a status code' };
+  }
+  if (got.value !== undefined) {
+    if (got.ref) {
+      return { error: 'the ' + who() + ' gives both [schema] and [exampleBody] — use one or the other' };
+    }
+    if (got.requiredOnly) {
+      return { error: 'the ' + who() + ' gives both [required] and [exampleBody] — use one or the other' };
+    }
+    return { code: got.code, name: got.name, order: got.order, summary: got.summary, value: got.value };
+  }
+  return {
+    code: got.code, name: got.name, order: got.order, summary: got.summary,
+    ref: got.ref, fromModel: true, requiredOnly: got.requiredOnly === true
+  };
 }
 
 module.exports = {

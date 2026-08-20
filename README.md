@@ -53,6 +53,13 @@ requestNumber:
   example: RQ/2026/000123
 ```
 
+Each marker is written the way the file's own version writes that field. The
+example above is a Swagger 2.0 or OpenAPI 3.0 file; from OpenAPI 3.1 on, where
+the schema keyword `example` is deprecated in favour of the JSON Schema
+`examples` keyword, the same marker gives `examples: [RQ/2026/000123]`. On a
+parameter the value goes on the parameter itself and the validation markers
+into its `schema`, because 3.x keeps the two apart.
+
 Markers also work at the operation level. `[response:]` adds a status code with
 its description, body schema, and example, and `[responseCase:]` /
 `[requestCase:]` add several named example cases to one code or to the request

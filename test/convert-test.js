@@ -52,7 +52,7 @@ const assert = (cond, msg) => { if (!cond) { console.error('FAIL: ' + msg); proc
     info: { title: 't', version: '1' },
     paths: { '/f': { post: {
       requestBody: { content: { 'application/json': {
-        example: { keepMe: true },
+        example: { keepMe: true, schema: { type: 'string', nullable: true, example: 'a payload field named schema' } },
         schema: { type: 'object', properties: {
           photo: { type: 'string', format: 'binary' },
           att: { type: 'string', format: 'byte' },
@@ -67,6 +67,8 @@ const assert = (cond, msg) => { if (!cond) { console.error('FAIL: ' + msg); proc
   const media = up31full.paths['/f'].post.requestBody.content['application/json'];
   const props = media.schema.properties;
   assert(media.example && media.example.keepMe === true, '3.0->3.1: Media Type example untouched');
+  assert(media.example.schema.nullable === true && media.example.schema.example === 'a payload field named schema',
+    '3.0->3.1: an example VALUE is data — a field called schema inside it is not modernized');
   assert(!('format' in props.photo) && props.photo.contentMediaType === 'application/octet-stream',
     '3.0->3.1: format binary -> contentMediaType');
   assert(!('format' in props.att) && props.att.contentEncoding === 'base64',

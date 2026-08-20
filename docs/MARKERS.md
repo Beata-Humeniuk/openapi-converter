@@ -34,7 +34,7 @@ convert **to** applies.
 
 | Marker | Swagger 2.0 | OpenAPI 3.0 | OpenAPI 3.1 / 3.2 |
 |---|---|---|---|
-| `[example: <value>]` | `example`, or `x-example` on a non-body parameter | `example` | `example` |
+| `[example: <value>]` | `example`, or `x-example` on a non-body parameter | `example` | `examples: [value]` on a schema, `example` on a parameter |
 | `[default: <value>]` | `default` | `default` | `default` |
 | `[exampleBody: {...}]` | ✓ | ✓ | ✓ |
 | `[format: <name>]` | ✓ | ✓ | ✓ |
@@ -60,6 +60,15 @@ a list, so `type: string` becomes `type: [string, null]`.
 `[exclusiveMinimum:]` and `[exclusiveMaximum:]` are a flag next to `minimum` /
 `maximum` up to OpenAPI 3.0 and a number of their own from 3.1.
 
+`[example:]` differs for the same reason. On a schema field, OpenAPI 3.1
+deprecated the `example` keyword in favour of the JSON Schema `examples`
+keyword, which takes a list, so from 3.1 on the marker is written as
+`examples: [value]` — the same value, in the place the version asks for it. A
+field that still carries the old `example` keyword loses it when a marker
+writes the new one, so the file never states its example twice. On a
+**parameter** the singular `example` field is current in every 3.x version,
+and that is where the value goes.
+
 ### Where a marker value is written
 
 One rule decides this, for every marker and every version:
@@ -77,6 +86,25 @@ One rule decides this, for every marker and every version:
 
 Nothing outside the specification, apart from those established extensions, is
 ever written into the file.
+
+### A marker on a parameter
+
+In Swagger 2.0 a parameter and its type are one object, so a marker in its
+description has only one place to go. From OpenAPI 3.0 on the two are
+separate, and each marker goes to the object that owns the field:
+
+- `[enum:]`, `[format:]`, `[pattern:]`, `[minimum:]` and the rest of the
+  validation markers are written into the parameter's `schema` — its type is
+  what they describe. A parameter that carries `content` instead of `schema`
+  is read the same way.
+- `[example:]` and `[deprecated]` are written on the **parameter** itself,
+  which is where both fields live in 3.x, and where Swagger UI reads the value
+  it fills the "Try it out" field with.
+- `[x-…]` extensions describe the parameter, so they stay on the parameter.
+
+A parameter that already carries named `examples` keeps its `[example:]`
+marker in the description, and the report says why: the specification allows
+only one of the two fields at a time.
 
 A marker left waiting is not lost: **OpenAPI: Convert Version** applies the
 markers to the converted file, so converting a Swagger 2.0 contract up to 3.x

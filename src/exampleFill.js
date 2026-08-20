@@ -6,11 +6,14 @@ const {
 } = require('./markerScanner');
 const {
   schemaHost, jsonList, wrapRefForSiblings, objectTarget, itemsTarget,
-  stripTagSpans, exampleTagValue, defaultTagValue, stripDescriptionTags
+  stripTagSpans, exampleTagValue, defaultTagValue, stripDescriptionTags, writtenExample
 } = require('./modelValues');
 const { applyOperationTags } = require('./operationMarkers');
 
 const NULLABLE_REPLACED_BY_TYPE_NULL = 3.1;
+const SCHEMA_EXAMPLE_IS_A_LIST = 3.1;
+
+const PARAMETER_OWN_FIELDS = { example: true, deprecated: true };
 
 function specVersion(spec) {
   if (!spec || typeof spec !== 'object') return 3.0;
@@ -48,61 +51,64 @@ function parseJsonValue(raw) {
   try { return JSON.parse(s); } catch (e) { return undefined; }
 }
 
-function spreadPayload(node, parsed, host, wrapRefs, stats) {
-  const items = itemsTarget(node, host);
+function spreadPayload(node, parsed, ctx) {
+  const items = itemsTarget(node, ctx.host);
   const rows = Array.isArray(parsed) ? parsed.filter((v) => v && typeof v === 'object' && !Array.isArray(v)) : null;
 
   if (items) {
     const row = rows ? rows[0] : parsed;
     if (!row || typeof row !== 'object') return 'an example for a list must be an object or a list of objects';
-    if (!objectTarget(items, host)) return 'the list element is not an object with fields';
-    const acceptedRow = spreadExample(items, row, host, wrapRefs, stats);
+    if (!objectTarget(items, ctx.host)) return 'the list element is not an object with fields';
+    const acceptedRow = spreadExample(items, row, ctx);
     if (!acceptedRow) return 'no key from the example matches the fields of the list element';
-    setWholeExample(node, [acceptedRow], wrapRefs, stats);
+    setSchemaExample(node, [acceptedRow], ctx);
     return null;
   }
 
   const value = rows ? (rows.length === 1 ? rows[0] : null) : parsed;
   if (!value || typeof value !== 'object') return 'the example has several rows but the field is not a list';
-  if (!objectTarget(node, host)) return 'the field is not an object with fields — use [example:]';
-  const accepted = spreadExample(node, value, host, wrapRefs, stats);
+  if (!objectTarget(node, ctx.host)) return 'the field is not an object with fields — use [example:]';
+  const accepted = spreadExample(node, value, ctx);
   if (!accepted) return 'no key from the example matches the fields of this object';
-  setWholeExample(node, accepted, wrapRefs, stats);
+  setSchemaExample(node, accepted, ctx);
   return null;
 }
 
-function setWholeExample(node, value, wrapRefs, stats) {
-  if (wrapRefs && wrapRefForSiblings(node)) stats.refsWrapped += 1;
-  node.example = value;
-  stats.examplesAdded += 1;
+function setSchemaExample(node, value, ctx) {
+  if (ctx.wrapRefs && wrapRefForSiblings(node)) ctx.stats.refsWrapped += 1;
+  if (ctx.version >= SCHEMA_EXAMPLE_IS_A_LIST) {
+    delete node.example;
+    node.examples = [value];
+  } else {
+    node.example = value;
+  }
+  ctx.stats.examplesAdded += 1;
 }
 
-function setLeafExample(prop, value, wrapRefs, stats) {
-  if (wrapRefs && wrapRefForSiblings(prop)) stats.refsWrapped += 1;
-  prop.example = value;
-  stats.examplesAdded += 1;
-  stats.fromTags += 1;
+function setLeafExample(prop, value, ctx) {
+  setSchemaExample(prop, value, ctx);
+  ctx.stats.fromTags += 1;
 }
 
-function spreadExample(node, value, host, wrapRefs, stats, path) {
-  const target = objectTarget(node, host);
+function spreadExample(node, value, ctx, path) {
+  const target = objectTarget(node, ctx.host);
   if (!target) return null;
   const accepted = {};
   let any = false;
   for (const [key, val] of Object.entries(value)) {
     const at = path ? path + '.' + key : key;
     const prop = target.properties[key];
-    if (!prop) { stats.unknownKeys.push(at); continue; }
+    if (!prop) { ctx.stats.unknownKeys.push(at); continue; }
     if (val && typeof val === 'object' && !Array.isArray(val)) {
-      const inner = spreadExample(prop, val, host, wrapRefs, stats, at);
+      const inner = spreadExample(prop, val, ctx, at);
       if (inner) { accepted[key] = inner; any = true; continue; }
     }
     if (Array.isArray(val) && val.length === 1 && val[0] && typeof val[0] === 'object' && !Array.isArray(val[0])) {
-      const items = itemsTarget(prop, host);
-      const inner = items && spreadExample(items, val[0], host, wrapRefs, stats, at + '[]');
+      const items = itemsTarget(prop, ctx.host);
+      const inner = items && spreadExample(items, val[0], ctx, at + '[]');
       if (inner) { accepted[key] = [inner]; any = true; continue; }
     }
-    setLeafExample(prop, val, wrapRefs, stats);
+    setLeafExample(prop, val, ctx);
     accepted[key] = val;
     any = true;
   }
@@ -115,9 +121,10 @@ function markNullableType(node) {
   else node.type = 'null';
 }
 
-function applyFieldTags(node, stats, version, isSwagger2Param, host, arrayOf, wrapRefs, path) {
-  const isSwagger2 = version < 3;
-  const text = String(node.description || '');
+function applyFieldTags(node, ctx, isSwagger2Param, arrayOf, path, owner) {
+  const isSwagger2 = ctx.version < 3;
+  const textHost = owner || node;
+  const text = String(textHost.description || '');
   if (text.indexOf('[') < 0) return;
   const applied = [];
   for (const tag of scanTags(text).reverse()) {
@@ -127,55 +134,71 @@ function applyFieldTags(node, stats, version, isSwagger2Param, host, arrayOf, wr
     if (field.kind === 'spread') {
       const parsed = parseJsonValue(tag.raw);
       if (parsed === undefined) {
-        stats.notApplied.push({ path: path, reason: 'the value is not valid JSON' });
+        ctx.stats.notApplied.push({ path: path, reason: 'the value is not valid JSON' });
         continue;
       }
-      const problem = spreadPayload(node, parsed, host, wrapRefs, stats);
-      if (problem) { stats.notApplied.push({ path: path, reason: problem }); continue; }
+      const problem = spreadPayload(node, parsed, ctx);
+      if (problem) { ctx.stats.notApplied.push({ path: path, reason: problem }); continue; }
       applied.push(tag);
-      stats.tagFields += 1;
+      ctx.stats.tagFields += 1;
       continue;
     }
 
     let placed;
     if (field.kind === 'example') {
-      placed = placeExample(tag.raw, node, arrayOf, host);
+      placed = placeExample(tag.raw, node, arrayOf, ctx.host);
     } else {
-      const v = coerceTagValue(field.kind, tag.raw, node, host);
+      const v = coerceTagValue(field.kind, tag.raw, node, ctx.host);
       placed = v === undefined ? undefined : { target: node, value: v };
     }
     if (placed === undefined) continue;
     const value = placed.value;
 
-    if (!fieldFitsNode(field.name, value, placed.target, host)) continue;
+    if (!fieldFitsNode(field.name, value, placed.target, ctx.host)) continue;
 
     let name = field.name;
     if (isSwagger2 && NO_SWAGGER2_SCHEMA_FIELD[name]) {
-      stats.notApplied.push({ path: path, reason: name +
+      ctx.stats.notApplied.push({ path: path, reason: name +
         ' has no field in Swagger 2.0 and no established x- extension — kept in the description' });
       continue;
     }
     if (isSwagger2 && SWAGGER2_SCHEMA_EXTENSION[name]) name = SWAGGER2_SCHEMA_EXTENSION[name];
 
-    if (wrapRefs && wrapRefForSiblings(placed.target)) stats.refsWrapped += 1;
+    let target = placed.target;
+    if (owner && (field.kind === 'json' || PARAMETER_OWN_FIELDS[name])) target = owner;
+
     if (name === 'example' && isSwagger2Param) name = 'x-example';
-    if (name === 'nullable' && version >= NULLABLE_REPLACED_BY_TYPE_NULL) {
+    if (name === 'nullable' && ctx.version >= NULLABLE_REPLACED_BY_TYPE_NULL) {
       if (value === true) markNullableType(placed.target);
       applied.push(tag);
-      stats.tagFields += 1;
+      ctx.stats.tagFields += 1;
       continue;
     }
-    placed.target[name] = value;
+    if (name === 'example' && target === owner && owner.examples && typeof owner.examples === 'object') {
+      ctx.stats.notApplied.push({ path: path, reason:
+        'the parameter already carries named examples, and `example` and `examples` exclude each other' });
+      continue;
+    }
+
+    if (name === 'example' && target !== owner) {
+      setLeafExample(target, value, ctx);
+      applied.push(tag);
+      ctx.stats.tagFields += 1;
+      continue;
+    }
+
+    if (ctx.wrapRefs && wrapRefForSiblings(target)) ctx.stats.refsWrapped += 1;
+    target[name] = value;
     applied.push(tag);
-    stats.tagFields += 1;
+    ctx.stats.tagFields += 1;
 
     if (name === 'example' || name === 'x-example') {
-      stats.examplesAdded += 1;
-      stats.fromTags += 1;
+      ctx.stats.examplesAdded += 1;
+      ctx.stats.fromTags += 1;
     }
-    else if (name === 'default') stats.defaultsAdded += 1;
+    else if (name === 'default') ctx.stats.defaultsAdded += 1;
   }
-  stripTagSpans(node, text, applied);
+  stripTagSpans(textHost, text, applied);
 }
 
 function protectRefSiblings(spec) {
@@ -194,11 +217,13 @@ function newStats() {
   };
 }
 
-function checkPatternAgainstExample(node, path, stats) {
-  if (!node.pattern || typeof node.example !== 'string') return;
+function checkPatternAgainstExample(node, path, stats, owner) {
+  if (!node.pattern) return;
+  const value = owner && owner.example !== undefined ? owner.example : writtenExample(node);
+  if (typeof value !== 'string') return;
   let re;
   try { re = new RegExp(node.pattern); } catch (e) { return; }
-  if (!re.test(node.example)) stats.mismatched.push(path);
+  if (!re.test(value) && stats.mismatched.indexOf(path) < 0) stats.mismatched.push(path);
 }
 
 function liftDescriptionTags(spec) {
@@ -211,20 +236,14 @@ function applyMarkers(spec) {
   const isSwagger2 = spec.swagger === '2.0';
   const host = schemaHost(spec);
   walkOperations(spec, (op, label) => applyOperationTags(op, isSwagger2, stats, spec.produces, label, host));
-  const wrapRefs = refSiblingsIgnored(spec);
-  const version = specVersion(spec);
-  walkSpec(spec, (node, path, exampleKey, arrayOf) => {
-    applyFieldTags(node, stats, version, exampleKey === 'x-example', host, arrayOf, wrapRefs, path);
+  const ctx = { stats: stats, host: host, wrapRefs: refSiblingsIgnored(spec), version: specVersion(spec) };
+  walkSpec(spec, (node, path, exampleKey, arrayOf, owner) => {
+    applyFieldTags(node, ctx, exampleKey === 'x-example', arrayOf, path, owner);
 
-    checkPatternAgainstExample(node, path, stats);
+    checkPatternAgainstExample(node, path, stats, owner);
   });
   return stats;
 }
-
-module.exports = {
-  applyMarkers, liftDescriptionTags, protectRefSiblings,
-  scanTags, stripDescriptionTags, exampleTagValue, defaultTagValue, coerceValue
-};
 
 module.exports = {
   applyMarkers, liftDescriptionTags, protectRefSiblings,

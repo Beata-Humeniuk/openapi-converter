@@ -640,7 +640,8 @@ const ref31Stats = applyMarkers(ref31);
 const R31 = ref31.definitions.Station.properties;
 assert(R31.quantity.$ref === '#/definitions/Shared_Quantity' && R31.quantity.allOf === undefined,
   '3.1: siblings of $ref are legal, so the structure is left alone');
-assert(R31.quantity.example === '5000.00', '3.1: value next to the reference');
+assert(JSON.stringify(R31.quantity.examples) === '["5000.00"]',
+  '3.1: value next to the reference, in the plural keyword 3.1 asks for');
 assert(ref31Stats.refsWrapped === 0, '3.1: nothing was wrapped');
 
 const wrappedSnapshot = JSON.stringify(ref2);
@@ -650,6 +651,7 @@ assert(JSON.stringify(ref2) === wrappedSnapshot && secondRun.refsWrapped === 0, 
 function effectiveExample(node, defs, depth) {
   if (!node || typeof node !== 'object' || (depth || 0) > 10) return undefined;
   if (node.example !== undefined) return node.example;
+  if (Array.isArray(node.examples) && node.examples.length) return node.examples[0];
   if (node.$ref) return effectiveExample(defs[String(node.$ref).split('/').pop()], defs, (depth || 0) + 1);
   for (const part of node.allOf || []) {
     const v = effectiveExample(part, defs, (depth || 0) + 1);
@@ -986,5 +988,82 @@ const nulNoType = (() => {
   return spec.components.schemas.P.properties.a;
 })();
 assert(nulNoType.type === 'null', '3.1 with no declared type: null becomes the type');
+
+const exampleByVersion = (root, host) => {
+  const spec = Object.assign({ info: { title: 'T', version: '1' }, paths: {} }, root,
+    host === 'definitions'
+      ? { definitions: { P: { type: 'object', properties: { a: { type: 'string', description: 'Field. [example: "X"]' } } } } }
+      : { components: { schemas: { P: { type: 'object', properties: { a: { type: 'string', description: 'Field. [example: "X"]' } } } } } });
+  const stats = applyMarkers(spec);
+  return { field: (spec.definitions || spec.components.schemas).P.properties.a, stats: stats };
+};
+const ex20 = exampleByVersion({ swagger: '2.0' }, 'definitions');
+assert(ex20.field.example === 'X' && ex20.field.examples === undefined,
+  '[example:] in 2.0 writes the example keyword');
+const ex30 = exampleByVersion({ openapi: '3.0.4' }, 'components');
+assert(ex30.field.example === 'X' && ex30.field.examples === undefined,
+  '[example:] in 3.0 writes the example keyword');
+for (const v of ['3.1.0', '3.1.2', '3.2.0']) {
+  const ex = exampleByVersion({ openapi: v }, 'components');
+  assert(JSON.stringify(ex.field.examples) === '["X"]' && ex.field.example === undefined,
+    '[example:] in ' + v + ' writes the examples list — the schema keyword example is deprecated from 3.1 on');
+  assert(ex.stats.examplesAdded === 1 && ex.stats.fromTags === 1, 'the example is counted once in ' + v);
+}
+
+const deprecatedExample = {
+  openapi: '3.1.2', info: { title: 'T', version: '1' }, paths: {},
+  components: { schemas: { P: { type: 'object', properties: {
+    a: { type: 'string', example: 'old', description: 'Field. [example: "new"]' }
+  } } } }
+};
+applyMarkers(deprecatedExample);
+assert(JSON.stringify(deprecatedExample.components.schemas.P.properties.a.examples) === '["new"]' &&
+  deprecatedExample.components.schemas.P.properties.a.example === undefined,
+  'a 3.1 field carrying the deprecated keyword is left with the new one only, never with both');
+
+const patternPlural = {
+  openapi: '3.1.2', info: { title: 'T', version: '1' }, paths: {},
+  components: { schemas: { P: { type: 'object', properties: {
+    a: { type: 'string', description: 'Serial. [example: "12-345"] [pattern: "^\\d{3}$"]' }
+  } } } }
+};
+assert(applyMarkers(patternPlural).mismatched.join() === 'P.a',
+  'the example is checked against the pattern in 3.1 too, where it is written as a list');
+
+const paramSpec = (version) => ({
+  openapi: version, info: { title: 'T', version: '1' },
+  paths: { '/s': { get: {
+    parameters: [
+      { name: 'channel', in: 'query', description: 'Channel. [enum: "WEB", "API"] [example: "WEB"] [x-source: "EA"]',
+        schema: { type: 'string' } },
+      { name: 'methods', in: 'query', description: 'Methods. [example: ["SMS", "MAIL"]] [minItems: 1]',
+        schema: { type: 'array', items: { type: 'string' } } },
+      { name: 'body', in: 'query', description: 'Filter. [format: "uuid"]',
+        content: { 'application/json': { schema: { type: 'string' } } } },
+      { name: 'named', in: 'query', description: 'Named. [example: "WEB"]',
+        examples: { one: { value: 'WEB' } }, schema: { type: 'string' } }
+    ],
+    responses: { '200': { description: 'OK' } } } } }
+});
+for (const version of ['3.0.4', '3.1.2']) {
+  const spec = paramSpec(version);
+  const stats = applyMarkers(spec);
+  const [channel, methods, viaContent, named] = spec.paths['/s'].get.parameters;
+  assert(JSON.stringify(channel.schema.enum) === '["WEB","API"]',
+    version + ': a marker in a parameter description reaches its schema');
+  assert(channel.description === 'Channel.', version + ': and is taken out of the description it stood in');
+  assert(channel.example === 'WEB' && channel.schema.example === undefined && channel.schema.examples === undefined,
+    version + ': the example of a parameter belongs to the parameter, which is where Swagger UI reads it from');
+  assert(channel['x-source'] === 'EA' && channel.schema['x-source'] === undefined,
+    version + ': an extension describes the parameter, not its type');
+  assert(JSON.stringify(methods.example) === '["SMS","MAIL"]' && methods.schema.minItems === 1,
+    version + ': a list example and a list keyword each land where they belong');
+  assert(viaContent.content['application/json'].schema.format === 'uuid',
+    version + ': a parameter described by content is read the same way');
+  assert(named.example === undefined && /\[example: "WEB"\]/.test(named.description),
+    version + ': a parameter with named examples keeps its marker — example and examples exclude each other');
+  assert(stats.notApplied.some((n) => /exclude each other/.test(n.reason)),
+    version + ': and the reason is reported');
+}
 
 console.log('example-fill-test OK');

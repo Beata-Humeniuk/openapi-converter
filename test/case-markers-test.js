@@ -502,4 +502,22 @@ assert(bothFieldsOp.summary === 'Creates an order.' && bothFieldsOp.description 
   'both fields are left with their own text');
 
 
+const modelFromPluralExamples = {
+  openapi: '3.1.2', info: { title: 'T', version: '1' },
+  paths: { '/orders': { post: {
+    description: 'Creates an order. [requestCase: [name: standard] [summary: Standard order]]',
+    requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/OrderRequest' } } } },
+    responses: { '200': { description: 'OK' } } } } },
+  components: { schemas: { OrderRequest: { type: 'object', properties: {
+    customerId: { type: 'string', examples: ['C-1'] },
+    couponCode: { type: 'string', description: 'Coupon. [example: "X10"]' }
+  } } } }
+};
+const pluralStats = applyMarkers(modelFromPluralExamples);
+const pluralCase = modelFromPluralExamples.paths['/orders'].post
+  .requestBody.content['application/json'].examples.standard;
+assert(JSON.stringify(pluralCase.value) === '{"customerId":"C-1","couponCode":"X10"}',
+  'a case built from the model reads the 3.1 examples list the same way it reads a marker');
+assert(pluralStats.notApplied.length === 0, 'and reports nothing left over');
+
 console.log('case-markers-test OK');

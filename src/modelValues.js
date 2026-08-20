@@ -81,8 +81,15 @@ function taggedListValue(node) {
   return tag ? jsonList(tag.raw) : null;
 }
 
+function writtenExample(node) {
+  if (!node || typeof node !== 'object') return undefined;
+  if (node.example !== undefined) return node.example;
+  return Array.isArray(node.examples) && node.examples.length ? node.examples[0] : undefined;
+}
+
 function modelExampleIn(node, host, seen, requiredOnly) {
-  const own = node.example !== undefined ? node.example : exampleTagValue(node);
+  const written = writtenExample(node);
+  const own = written !== undefined ? written : exampleTagValue(node);
   if (own !== undefined) {
     return isArraySchema(node) && own !== null && !Array.isArray(own) ? [own] : own;
   }
@@ -158,6 +165,6 @@ function stripDescriptionTags(description) {
 
 module.exports = {
   schemaHost, jsonList, wrapRefForSiblings, resolveRef, objectTarget, itemsTarget,
-  collectProperties, collectRequired, modelExample, stripTagSpans,
+  collectProperties, collectRequired, modelExample, writtenExample, stripTagSpans,
   findTag, exampleTagValue, defaultTagValue, stripDescriptionTags
 };

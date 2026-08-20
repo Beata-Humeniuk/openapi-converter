@@ -3,6 +3,8 @@ const SUB_ONE = ['items', 'not', 'contains', 'propertyNames', 'additionalPropert
 const SUB_LIST = ['allOf', 'anyOf', 'oneOf', 'prefixItems'];
 const SUB_MAP = ['properties', 'patternProperties', 'dependentSchemas', '$defs', 'definitions'];
 
+const LITERAL_KEYS = new Set(['example', 'examples', 'enum', 'const', 'default']);
+
 function forEachSchema(schema, fn) {
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return;
   fn(schema);
@@ -25,7 +27,9 @@ function forEachSchemaInDoc(doc, fn) {
     if (!node || typeof node !== 'object') return;
     if (node.schema && typeof node.schema === 'object') roots.push(node.schema);
     if (node.itemSchema && typeof node.itemSchema === 'object') roots.push(node.itemSchema);
-    for (const value of Object.values(node)) collect(value);
+    for (const [key, value] of Object.entries(node)) {
+      if (!LITERAL_KEYS.has(key)) collect(value);
+    }
   })(doc);
   const compSchemas = doc.components && doc.components.schemas;
   if (compSchemas && typeof compSchemas === 'object') roots.push(...Object.values(compSchemas));

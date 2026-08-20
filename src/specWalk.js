@@ -21,12 +21,22 @@ function walkSchema(schema, path, visit, seen, arrayOf) {
   }
 }
 
+function parameterSchema(p) {
+  if (p.schema && typeof p.schema === 'object') return p.schema;
+  const media = Object.values(p.content || {})[0];
+  return media && typeof media.schema === 'object' ? media.schema : null;
+}
+
 function walkParameters(params, isSwagger2, pathLabel, visit, seen) {
   for (const p of params || []) {
     if (!p || typeof p !== 'object' || p.$ref) continue;
     const label = pathLabel + '(' + (p.name || '?') + ')';
     if (p.schema) walkSchema(p.schema, label, visit, seen);
-    else if (isSwagger2 && p.in !== 'body') visit(p, label, 'x-example');
+    else if (p.content) walkContent(p.content, label, visit, seen);
+    else if (isSwagger2 && p.in !== 'body') { visit(p, label, 'x-example'); continue; }
+    if (isSwagger2) continue;
+    const schema = parameterSchema(p);
+    if (schema) visit(schema, label, undefined, undefined, p);
   }
 }
 

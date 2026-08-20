@@ -99,5 +99,31 @@ const field = (spec) => (spec.definitions || spec.components.schemas).P.properti
     refSiblings.definitions.Holder.properties.viaRef.allOf === undefined,
     '5: the file the conversion read from is left exactly as it was');
 
-  console.log('convert-markers-test OK (5 scenarios)');
+  const paramSource = {
+    swagger: '2.0', info: { title: 'T', version: '1' },
+    paths: { '/s': { get: {
+      parameters: [{ name: 'channel', in: 'query', type: 'string',
+        description: 'Channel. [enum: "WEB", "API"] [example: "WEB"]' }],
+      responses: { '200': { description: 'OK' } } } } },
+    definitions: { P: { type: 'object', properties: {
+      a: { type: 'string', description: 'Field. [example: "X"]' } } } }
+  };
+  ({ openapi } = await convertSpec(clone(paramSource), '3.1.2'));
+  const lifted31 = liftDescriptionTags(openapi);
+  const param31 = openapi.paths['/s'].get.parameters[0];
+  assert(JSON.stringify(param31.schema.enum) === '["WEB","API"]' && param31.example === 'WEB',
+    '6: converting upwards applies the parameter markers 2.0 kept flat — keywords to the schema, the example to the parameter');
+  assert(param31.description === 'Channel.' && lifted31.notApplied.length === 0,
+    '6: and leaves nothing behind in the description');
+  assert(JSON.stringify(field(openapi).examples) === '["X"]' && field(openapi).example === undefined,
+    '6: a schema example is written the way 3.1 asks for it — the singular keyword is deprecated there');
+
+  ({ openapi } = await convertSpec(clone(openapi), '3.0.4'));
+  assert(field(openapi).example === 'X' && field(openapi).examples === undefined,
+    '6: and it converts back to the singular keyword 3.0 knows');
+  const param30 = openapi.paths['/s'].get.parameters[0];
+  assert(param30.example === 'WEB' && JSON.stringify(param30.schema.enum) === '["WEB","API"]',
+    '6: the parameter keeps its example on the way down — 3.0 has that field too');
+
+  console.log('convert-markers-test OK (6 scenarios)');
 })();

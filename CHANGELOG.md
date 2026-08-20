@@ -3,6 +3,41 @@
 This file lists user-visible changes to OpenAPI Converter. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-08-20
+
+### Changed
+
+- **A `[example:]` marker on a schema field is written the way OpenAPI 3.1 and
+  3.2 ask for it**: `examples: [value]`, the JSON Schema keyword those versions
+  put in place of the schema keyword `example`, which they deprecate. Up to
+  OpenAPI 3.0 nothing changes — the marker still gives `example`. A converted
+  file used to end up stating the same thing in two ways, because the
+  conversion moved the values it found into `examples` while the markers kept
+  writing `example` next to them. A field that carries the old keyword loses it
+  when a marker writes the new one, so an example is never stated twice.
+- Editors and validators that only know the OpenAPI 3.0 schema report
+  `examples` on a schema as "property not allowed". That is the tool being
+  older than the file, not a fault in it: the keyword is what 3.1 and 3.2 ask
+  for, and a converted file validates against the official OpenAPI schemas.
+
+### Fixed
+
+- **Markers in the description of a parameter are applied in OpenAPI 3.x**, not
+  only in Swagger 2.0. In 2.0 a parameter and its type are one object; from 3.0
+  on they are separate, and the markers stayed unread in the description with
+  nothing said about it. `[enum:]`, `[format:]`, `[pattern:]` and the other
+  validation markers now go into the parameter's `schema`, `[example:]` and
+  `[deprecated]` onto the parameter itself, and `[x-…]` extensions stay with
+  the parameter, so a Swagger 2.0 contract keeps its parameter markers when it
+  is converted upwards. A parameter described by `content` instead of `schema`
+  is read the same way, and one that already carries named `examples` keeps its
+  `[example:]` marker, with the reason given in the report — the specification
+  allows only one of the two fields.
+- Converting to 3.1 or 3.2 no longer reaches inside example values. A payload
+  that happened to carry a field called `schema`, `example` or `enum` was
+  treated as part of the contract and modernized; example values are data and
+  are now left exactly as they were.
+
 ## [1.3.0] - 2026-08-20
 
 ### Changed

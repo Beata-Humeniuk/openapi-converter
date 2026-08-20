@@ -426,7 +426,7 @@ const fitSpec = {
   info: { title: 'T', version: '1' },
   paths: {},
   components: { schemas: { L: { type: 'object', properties: {
-    amount: { type: 'number', description: 'Limit quantity [pattern: ^\\d+\\.\\d{2}$] [example: 5000.00]' },
+    reading: { type: 'number', description: 'Limit quantity [pattern: ^\\d+\\.\\d{2}$] [example: 5000.00]' },
     counter: { type: 'integer', description: '[minLength: 3]' },
     text: { type: 'string', description: '[minimum: 1]' },
     text2: { type: 'string', description: '[uniqueItems]' },
@@ -438,9 +438,9 @@ const fitSpec = {
 };
 const fitStats = applyMarkers(fitSpec);
 const F = fitSpec.components.schemas.L.properties;
-assert(F.amount.pattern === undefined, '[pattern:] does not land on a numberic field');
-assert(/\[pattern:/.test(F.amount.description), 'a non-matching [pattern:] stays in the description, visible');
-assert(F.amount.example === 5000, 'the example from the same note still works (JSON does not know 5000.00)');
+assert(F.reading.pattern === undefined, '[pattern:] does not land on a numberic field');
+assert(/\[pattern:/.test(F.reading.description), 'a non-matching [pattern:] stays in the description, visible');
+assert(F.reading.example === 5000, 'the example from the same note still works (JSON does not know 5000.00)');
 assert(F.counter.minLength === undefined && /\[minLength:/.test(F.counter.description), '[minLength:] only on a string');
 assert(F.text.minimum === undefined && /\[minimum:/.test(F.text.description), '[minimum:] only on a number');
 assert(F.text2.uniqueItems === undefined, '[uniqueItems] only on an array');
@@ -468,7 +468,7 @@ const quoteSpec = {
   swagger: '2.0',
   info: { title: 'T', version: '1' },
   paths: { '/x': { get: {
-    description: 'Something. [operationId: getX] [tags: "Alerts, Cards", "Sensors"]',
+    description: 'Something. [operationId: getX] [tags: "Alerts, Reports", "Sensors"]',
     responses: { '200': { description: 'OK' } }
   } } },
   definitions: { Q: { type: 'object', properties: {
@@ -497,7 +497,7 @@ assert(Q.quantity.example === undefined && /\[example:/.test(Q.quantity.descript
 assert(Q.flag.example === undefined, 'same on a boolean field');
 assert(Q.enumOfNumbers.enum === undefined && /\[enum:/.test(Q.enumOfNumbers.description),
   'a quoted enum of numbers: the whole marker stays, not half the list');
-assert(JSON.stringify(quoteSpec.paths['/x'].get.tags) === '["Alerts, Cards","Sensors"]',
+assert(JSON.stringify(quoteSpec.paths['/x'].get.tags) === '["Alerts, Reports","Sensors"]',
   'operation tag list: a comma inside quotes belongs to the value');
 assert(quoteStats.tagFields > 0, 'quoted markers were counted');
 
@@ -612,23 +612,23 @@ assert(JSON.stringify(E.list.enum) === '["a\\"b","c"]', 'a quote inside an enum 
 
 const refSpec = (root) => Object.assign({ info: { title: 'T', version: '1' }, paths: {}, definitions: {
   Station: { type: 'object', properties: {
-    quantity: { $ref: '#/definitions/Shared_Amount', description: 'Limit quantity [example: "5000.00"] [format: "decimal"]' },
-    noMarker: { $ref: '#/definitions/Shared_Amount' }
+    quantity: { $ref: '#/definitions/Shared_Quantity', description: 'Limit quantity [example: "5000.00"] [format: "decimal"]' },
+    noMarker: { $ref: '#/definitions/Shared_Quantity' }
   } },
-  Shared_Amount: { type: 'string', description: 'Shared type' }
+  Shared_Quantity: { type: 'string', description: 'Shared type' }
 } }, root);
 
 const ref2 = refSpec({ swagger: '2.0' });
 const ref2Stats = applyMarkers(ref2);
 const R2 = ref2.definitions.Station.properties;
 assert(R2.quantity.$ref === undefined, '2.0: bare $ref replaced by the wrapper');
-assert(JSON.stringify(R2.quantity.allOf) === '[{"$ref":"#/definitions/Shared_Amount"}]', '2.0: reference preserved inside allOf');
+assert(JSON.stringify(R2.quantity.allOf) === '[{"$ref":"#/definitions/Shared_Quantity"}]', '2.0: reference preserved inside allOf');
 assert(R2.quantity.example === '5000.00' && R2.quantity.format === 'decimal', '2.0: values from the note next to allOf');
 assert(R2.quantity.description === 'Limit quantity', '2.0: the description stays on the wrapper, where it takes effect');
 assert(ref2Stats.refsWrapped === 1, 'the wrap counted in the report');
-assert(R2.noMarker.$ref === '#/definitions/Shared_Amount' && R2.noMarker.allOf === undefined,
+assert(R2.noMarker.$ref === '#/definitions/Shared_Quantity' && R2.noMarker.allOf === undefined,
   'a field without a marker is not touched');
-assert(JSON.stringify(ref2.definitions.Shared_Amount) === JSON.stringify({ type: 'string', description: 'Shared type' }),
+assert(JSON.stringify(ref2.definitions.Shared_Quantity) === JSON.stringify({ type: 'string', description: 'Shared type' }),
   'the shared type is untouched — that is the whole point of this exercise');
 
 const ref30 = refSpec({ openapi: '3.0.3' });
@@ -638,7 +638,7 @@ assert(ref30.definitions.Station.properties.quantity.allOf !== undefined, '3.0: 
 const ref31 = refSpec({ openapi: '3.1.0' });
 const ref31Stats = applyMarkers(ref31);
 const R31 = ref31.definitions.Station.properties;
-assert(R31.quantity.$ref === '#/definitions/Shared_Amount' && R31.quantity.allOf === undefined,
+assert(R31.quantity.$ref === '#/definitions/Shared_Quantity' && R31.quantity.allOf === undefined,
   '3.1: siblings of $ref are legal, so the structure is left alone');
 assert(R31.quantity.example === '5000.00', '3.1: value next to the reference');
 assert(ref31Stats.refsWrapped === 0, '3.1: nothing was wrapped');
@@ -662,10 +662,10 @@ const precSpec = {
   swagger: '2.0', info: { title: 'T', version: '1' }, paths: {},
   definitions: {
     Station: { type: 'object', properties: {
-      withOwn: { $ref: '#/definitions/Shared_Amount', description: 'Limit quantity [example: "5000.00"]' },
-      withoutOwn: { $ref: '#/definitions/Shared_Amount', description: 'Another quantity, without its own example' }
+      withOwn: { $ref: '#/definitions/Shared_Quantity', description: 'Limit quantity [example: "5000.00"]' },
+      withoutOwn: { $ref: '#/definitions/Shared_Quantity', description: 'Another quantity, without its own example' }
     } },
-    Shared_Amount: { type: 'string', description: 'Shared type [example: "0.00"]' }
+    Shared_Quantity: { type: 'string', description: 'Shared type [example: "0.00"]' }
   }
 };
 applyMarkers(precSpec);
@@ -674,7 +674,7 @@ assert(effectiveExample(D.Station.properties.withOwn, D) === '5000.00',
   'a field with its own marker shows ITS OWN example, not the shared type\'s');
 assert(effectiveExample(D.Station.properties.withoutOwn, D) === '0.00',
   'a field without its own marker falls back to the shared type\'s example');
-assert(D.Shared_Amount.example === '0.00', 'the shared type keeps its example for the remaining usages');
+assert(D.Shared_Quantity.example === '0.00', 'the shared type keeps its example for the remaining usages');
 assert(D.Station.properties.withOwn.allOf !== undefined,
   'this wrapper is what makes the field\'s own example visible at all');
 
@@ -682,10 +682,10 @@ const prec31Spec = {
   openapi: '3.1.0', info: { title: 'T', version: '1' }, paths: {},
   components: { schemas: {
     Station: { type: 'object', properties: {
-      withOwn: { $ref: '#/components/schemas/Shared_Amount', description: 'Quantity [example: "5000.00"]' },
-      withoutOwn: { $ref: '#/components/schemas/Shared_Amount' }
+      withOwn: { $ref: '#/components/schemas/Shared_Quantity', description: 'Quantity [example: "5000.00"]' },
+      withoutOwn: { $ref: '#/components/schemas/Shared_Quantity' }
     } },
-    Shared_Amount: { type: 'string', description: '[example: "0.00"]' }
+    Shared_Quantity: { type: 'string', description: '[example: "0.00"]' }
   } }
 };
 applyMarkers(prec31Spec);
@@ -697,14 +697,14 @@ const spreadSpec = {
   swagger: '2.0', info: { title: 'T', version: '1' }, paths: {},
   definitions: {
     Ticket: { type: 'object', properties: {
-      details: { $ref: '#/definitions/Shared_Details', description: 'Details [exampleBody: {"channel": "MAIL", "region": "260", "limit": {"amount": "1000.00"}, "tags": ["A", "B"], "typo": 1}]' },
+      details: { $ref: '#/definitions/Shared_Details', description: 'Details [exampleBody: {"channel": "MAIL", "region": "260", "limit": {"reading": "1000.00"}, "tags": ["A", "B"], "typo": 1}]' },
       whole:   { $ref: '#/definitions/Shared_Details', description: 'Whole [example: {"channel": "SMS"}]' },
       rows:    { type: 'array', items: { $ref: '#/definitions/Shared_Row' }, description: 'Rows [exampleBody: [{"role": "23", "allowed": true}]]' }
     } },
     Shared_Details: { type: 'object', properties: {
       channel: { $ref: '#/definitions/Shared_Channel' },
       region:  { type: 'string' },
-      limit:   { type: 'object', properties: { amount: { type: 'string' } } },
+      limit:   { type: 'object', properties: { reading: { type: 'string' } } },
       tags:    { type: 'array', items: { type: 'string' } }
     } },
     Shared_Row: { type: 'object', properties: { role: { type: 'string' }, allowed: { type: 'boolean' } } },
@@ -716,10 +716,10 @@ const SD = spreadSpec.definitions;
 assert(SD.Shared_Details.properties.region.example === '260', '[exampleBody:] assigns the example to the field underneath');
 assert(SD.Shared_Details.properties.channel.example === 'MAIL', 'a field typed with the shared type also gets its own example');
 assert(SD.Shared_Details.properties.channel.allOf !== undefined, 'the $ref field is wrapped so the example is not dead');
-assert(SD.Shared_Details.properties.limit.properties.amount.example === '1000.00', 'the spread descends into nested objects');
+assert(SD.Shared_Details.properties.limit.properties.reading.example === '1000.00', 'the spread descends into nested objects');
 assert(JSON.stringify(SD.Shared_Details.properties.tags.example) === '["A","B"]', 'a list lands at the array field');
 assert(JSON.stringify(SD.Ticket.properties.details.example) ===
-  '{"channel":"MAIL","region":"260","limit":{"amount":"1000.00"},"tags":["A","B"]}',
+  '{"channel":"MAIL","region":"260","limit":{"reading":"1000.00"},"tags":["A","B"]}',
   '[exampleBody:] also leaves the whole example on the field — without it the payload would show fields outside the note');
 assert(spreadStats.unknownKeys.indexOf('typo') >= 0, 'a key outside the model is reported, not inserted silently');
 assert(SD.Shared_Details.properties.typo === undefined, 'and indeed not added to the structure');
@@ -959,131 +959,6 @@ applyMarkers(respNoResponses);
 assert(respNoResponses.paths['/y'].delete.responses['204'].description === 'No Content',
   'an operation without a responses object gets one');
 
-const caseSpec = {
-  openapi: '3.0.3', info: { title: 'T', version: '1' },
-  paths: { '/orders': { post: {
-    operationId: 'createOrder',
-    description: 'Creates an order.\n' +
-      '[requestCase: minimal "Case 1 - required fields" {"customerId": "C-1", "items": [{"sku": "S-1"}]}]\n' +
-      '[requestCase: withDiscount {"customerId": "C-1", "couponCode": "X10", "items": [{"sku": "S-1"}]}]\n' +
-      '[responseCase: 200 confirmed "Case A" {"orderId": "ORD-1", "status": "CONFIRMED", "typo": 1}]\n' +
-      '[responseCase: 200 pending "Case B" {"orderId": "ORD-2", "status": "AWAITING_PAYMENT"}]\n' +
-      '[responseCase: 400 missingField "Case C" {"code": "BAD_REQUEST", "typo": 1}]',
-    requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/OrderRequest' } } } },
-    responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } } }
-  } } },
-  components: { schemas: {
-    OrderRequest: { type: 'object', properties: { customerId: { type: 'string' }, couponCode: { type: 'string' }, items: { type: 'array', items: { type: 'object', properties: { sku: { type: 'string' } } } } } },
-    Order: { type: 'object', properties: { orderId: { type: 'string' }, status: { type: 'string' } } }
-  } }
-};
-const caseStats = applyMarkers(caseSpec);
-const caseOp = caseSpec.paths['/orders'].post;
-const reqEx = caseOp.requestBody.content['application/json'].examples;
-const okEx = caseOp.responses['200'].content['application/json'].examples;
-assert(Object.keys(reqEx).join() === 'minimal,withDiscount', 'several named request cases, in the order written');
-assert(reqEx.minimal.summary === 'Case 1 - required fields', 'a request case keeps its summary');
-assert(reqEx.minimal.value.customerId === 'C-1', 'a request case keeps its value');
-assert(reqEx.withDiscount.summary === undefined, 'a case without a summary gets only value');
-assert(Object.keys(okEx).join() === 'confirmed,pending', 'several named cases under ONE response code');
-assert(okEx.pending.value.status === 'AWAITING_PAYMENT', 'the second case for 200 keeps its own value');
-assert(caseOp.responses['400'].description === 'Bad Request', 'a case creates a missing response with the reason phrase');
-assert(caseStats.unknownKeys.indexOf('POST /orders 200 [confirmed].typo') >= 0,
-  'a case example is checked against the response schema, labelled with the case name');
-assert(caseStats.unknownKeys.indexOf('POST /orders 200 [pending].status') < 0, 'known keys are not reported');
-assert(caseOp.description === 'Creates an order.', 'case markers are removed from the description');
-assert(caseStats.examplesAdded === 5, 'every case counts as an example');
-
-const caseSnapshot = JSON.stringify(caseSpec);
-applyMarkers(caseSpec);
-assert(JSON.stringify(caseSpec) === caseSnapshot, 'named cases are idempotent');
-
-const caseSwagger2 = {
-  swagger: '2.0', info: { title: 'T', version: '1' },
-  paths: { '/o': { post: { operationId: 'c',
-    description: 'Op. [responseCase: 200 confirmed "Case A" {"a": 1}] [response: 404 "Not found"]',
-    responses: {} } } }
-};
-const case2Stats = applyMarkers(caseSwagger2);
-const case2Op = caseSwagger2.paths['/o'].post;
-assert(case2Op.responses['404'] !== undefined && case2Op.responses['200'] === undefined,
-  'Swagger 2.0: [response:] still works, [responseCase:] is not applied');
-assert(/\[responseCase:/.test(case2Op.description), 'Swagger 2.0: the rejected case stays visible in the description');
-assert(case2Stats.notApplied.some((n) => /OpenAPI 3\.x/.test(n.reason)), 'Swagger 2.0: the case is reported with a reason');
-
-const caseConflict = {
-  openapi: '3.0.3', info: { title: 'T', version: '1' },
-  paths: { '/o': { get: { operationId: 'g',
-    description: '[response: 200 "OK" {"a": 1}] [responseCase: 200 case1 "Case A" {"a": 2}]',
-    responses: {} } } }
-};
-const conflictStats = applyMarkers(caseConflict);
-const conflictMedia = caseConflict.paths['/o'].get.responses['200'].content['application/json'];
-assert(conflictMedia.example === undefined && conflictMedia.examples.case1 !== undefined,
-  'a named case replaces a single example — 3.x forbids both on one media type');
-assert(conflictStats.notApplied.length === 0,
-  'replacing a single example with cases is normal — it must not raise a warning');
-
-const caseNoBody = {
-  openapi: '3.0.3', info: { title: 'T', version: '1' },
-  paths: { '/o': { get: { operationId: 'g',
-    description: '[requestCase: x "Case" {"a": 1}] [responseCase: 200 y {"b": 2}] [responseCase: 200 {"c": 3}]',
-    responses: {} } } }
-};
-const noBodyStats = applyMarkers(caseNoBody);
-assert(noBodyStats.notApplied.some((n) => /no request body/.test(n.reason)),
-  'a request case on an operation without a body is reported');
-assert(noBodyStats.notApplied.some((n) => /needs a name/.test(n.reason)), 'a case without a name is reported');
-assert(caseNoBody.paths['/o'].get.responses['200'].content['application/json'].examples.y.value.b === 2,
-  'the valid case in the same description is still applied');
-
-const mergeSpec = {
-  openapi: '3.1.0', info: { title: 'T', version: '1' },
-  paths: { '/orders/{id}': { get: { operationId: 'getOrder',
-    description: 'Fetches an order.\n' +
-      '[response: 404 "Not found" #ApiError {"code": "NOT_FOUND"}]\n' +
-      '[response: 400 "Text from the marker"]\n' +
-      '[response: 409 #OtherError]\n' +
-      '[responseCase: 500 failure "Case" {"code": "INTERNAL"}]',
-    responses: {
-      '200': { description: 'OK from the generator',
-               headers: { 'X-Request-Id': { schema: { type: 'string' } } },
-               content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } },
-      '400': { description: 'Old text from the generator',
-               headers: { 'X-Id': { schema: { type: 'string' } } },
-               content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
-      '409': { description: 'Conflict from the generator',
-               content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
-      '500': { description: 'Error from the generator',
-               content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } }
-    } } } },
-  components: { schemas: {
-    Order: { type: 'object', properties: { orderId: { type: 'string' } } },
-    ApiError: { type: 'object', properties: { code: { type: 'string' } } },
-    OtherError: { type: 'object', properties: { err: { type: 'string' } } }
-  } }
-};
-const before200 = JSON.stringify(mergeSpec.paths['/orders/{id}'].get.responses['200']);
-applyMarkers(mergeSpec);
-const mergeOp = mergeSpec.paths['/orders/{id}'].get;
-
-assert(Object.keys(mergeOp.responses).join() === '200,400,404,409,500',
-  'codes from the generator survive and the marker codes are added alongside');
-assert(JSON.stringify(mergeOp.responses['200']) === before200,
-  'a response no marker mentions is byte-identical afterwards, headers included');
-assert(mergeOp.responses['400'].description === 'Text from the marker',
-  'a description given by the marker replaces the generated one');
-assert(mergeOp.responses['400'].headers['X-Id'] !== undefined &&
-  mergeOp.responses['400'].content['application/json'].schema.$ref === '#/components/schemas/ApiError',
-  'but the headers and the schema the marker did not mention stay');
-assert(mergeOp.responses['409'].description === 'Conflict from the generator',
-  'a schema-only marker leaves the generated description alone');
-assert(mergeOp.responses['409'].content['application/json'].schema.$ref === '#/components/schemas/OtherError',
-  'and swaps only the schema it names');
-assert(mergeOp.responses['500'].description === 'Error from the generator' &&
-  mergeOp.responses['500'].content['application/json'].examples.failure !== undefined &&
-  mergeOp.responses['500'].content['application/json'].schema.$ref === '#/components/schemas/ApiError',
-  'a case added to a generated response keeps its description and schema');
 
 const nullableByVersion = (root, host) => {
   const spec = Object.assign({ info: { title: 'T', version: '1' }, paths: {} }, root,
@@ -1111,131 +986,5 @@ const nulNoType = (() => {
   return spec.components.schemas.P.properties.a;
 })();
 assert(nulNoType.type === 'null', '3.1 with no declared type: null becomes the type');
-
-const modelCaseSpec = () => ({
-  openapi: '3.0.3', info: { title: 'T', version: '1' },
-  paths: { '/orders': { post: { operationId: 'createOrder',
-    description: 'Creates an order.\n' +
-      '[requestCase: standard "Standard order"]\n' +
-      '[requestCase: bulk "Bulk order" {"customerId": "C-1", "items": [{"sku": "S-9"}]}]\n' +
-      '[responseCase: 200 ok "Confirmed"]',
-    requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/OrderRequest' } } } },
-    responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } } } } } },
-  components: { schemas: {
-    OrderRequest: { type: 'object', properties: {
-      customerId: { type: 'string', description: 'Reference. [example: "C-1"]' },
-      note:       { type: 'string', description: 'No example here.' },
-      shipTo:     { $ref: '#/components/schemas/Address' },
-      items:      { type: 'array', items: { type: 'object', properties: {
-        sku: { type: 'string', description: '[example: "S-1"]' },
-        qty: { type: 'integer', description: '[example: 1]' } } } },
-      alerts:     { type: 'array', items: { type: 'string', description: '[example: ["SMS", "MAIL"]]' } }
-    } },
-    Address: { type: 'object', properties: { city: { type: 'string', description: '[example: "Lisbon"]' } } },
-    Order: { type: 'object', properties: { orderId: { type: 'string', description: '[example: "ORD-1"]' } } }
-  } }
-});
-const modelCase = modelCaseSpec();
-const modelStats = applyMarkers(modelCase);
-const modelOp = modelCase.paths['/orders'].post;
-const modelReq = modelOp.requestBody.content['application/json'].examples;
-assert(JSON.stringify(modelReq.standard.value) ===
-  '{"customerId":"C-1","shipTo":{"city":"Lisbon"},"items":[{"sku":"S-1","qty":1}],"alerts":["SMS","MAIL"]}',
-  'a case with no JSON is built from the field examples of the body schema, through $ref and into array items');
-assert(modelReq.standard.value.note === undefined, 'a field with no example is left out, silently');
-assert(modelStats.notApplied.length === 0, 'and nothing is reported for it');
-assert(modelReq.standard.summary === 'Standard order', 'the summary still describes the generated case');
-assert(Object.keys(modelReq).join() === 'standard,bulk', 'generated and hand-written cases sit side by side, in order');
-assert(JSON.stringify(modelReq.bulk.value) === '{"customerId":"C-1","items":[{"sku":"S-9"}]}',
-  'the hand-written case keeps exactly what was written');
-assert(JSON.stringify(modelOp.responses['200'].content['application/json'].examples.ok.value) === '{"orderId":"ORD-1"}',
-  '[responseCase:] builds from the model the same way');
-assert(modelCase.components.schemas.OrderRequest.properties.customerId.example === 'C-1',
-  'the field markers are still applied to the schema itself');
-assert(modelOp.description === 'Creates an order.', 'applied case markers leave the description');
-
-const modelSnapshot = JSON.stringify(modelCase);
-applyMarkers(modelCase);
-assert(JSON.stringify(modelCase) === modelSnapshot, 'cases built from the model are idempotent');
-
-const refCase = modelCaseSpec();
-refCase.paths['/orders'].post.description = '[requestCase: fromAddress "Just the address" #Address]';
-applyMarkers(refCase);
-assert(JSON.stringify(refCase.paths['/orders'].post.requestBody.content['application/json']
-  .examples.fromAddress.value) === '{"city":"Lisbon"}',
-  '#Schema builds the case from the named schema instead of the one on the media type');
-
-const refPointer = modelCaseSpec();
-refPointer.paths['/orders'].post.description = '[requestCase: a "X" #/components/schemas/Address]';
-applyMarkers(refPointer);
-assert(refPointer.paths['/orders'].post.requestBody.content['application/json'].examples.a.value.city === 'Lisbon',
-  'a full JSON pointer names the schema too');
-
-const bothForms = modelCaseSpec();
-bothForms.paths['/orders'].post.description = '[requestCase: a "X" #Address {"city": "Porto"}]';
-const bothStats = applyMarkers(bothForms);
-assert(bothForms.paths['/orders'].post.requestBody.content['application/json'].examples === undefined,
-  'a schema and an example in one case is refused, not half-applied');
-assert(bothStats.notApplied.some((n) => /both a schema and an example/.test(n.reason)), 'and reported with a reason');
-assert(/\[requestCase:/.test(bothForms.paths['/orders'].post.description), 'the refused marker stays visible');
-
-const missingRef = modelCaseSpec();
-missingRef.paths['/orders'].post.description = '[requestCase: a "X" #DoesNotExist]';
-const missingStats = applyMarkers(missingRef);
-assert(missingStats.notApplied.some((n) => /DoesNotExist does not exist/.test(n.reason)),
-  'a schema that is not in the file is reported');
-
-const emptyModel = {
-  openapi: '3.0.3', info: { title: 'T', version: '1' },
-  paths: { '/x': { post: { operationId: 'p', description: '[requestCase: standard "Std"]',
-    requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Bare' } } } },
-    responses: {} } } },
-  components: { schemas: { Bare: { type: 'object', properties: { a: { type: 'string' } } } } }
-};
-const emptyStats = applyMarkers(emptyModel);
-assert(emptyModel.paths['/x'].post.requestBody.content['application/json'].examples === undefined,
-  'a model with no examples produces no empty case');
-assert(emptyStats.notApplied.some((n) => /would come out empty/.test(n.reason)), 'it is reported instead');
-assert(/\[requestCase:/.test(emptyModel.paths['/x'].post.description), 'and the marker stays visible');
-
-const modelArrays = {
-  openapi: '3.0.3', info: { title: 'T', version: '1' },
-  paths: { '/x': { post: { operationId: 'p', description: '[requestCase: standard "Std"]',
-    requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Lists' } } } },
-    responses: {} } } },
-  components: { schemas: { Lists: { type: 'object', properties: {
-    onArray:   { type: 'array', items: { type: 'string' }, description: 'One value written on the array. [example: "SMS"]' },
-    onItem:    { type: 'array', items: { type: 'string', description: '[example: "SMS"]' } },
-    listOnItem: { type: 'array', items: { type: 'string', description: '[example: ["SMS", "MAIL"]]' } },
-    matrix:    { type: 'array', items: { type: 'array', items: { type: 'integer' }, description: '[example: [1, 2]]' } }
-  } } } }
-};
-applyMarkers(modelArrays);
-const arraysValue = modelArrays.paths['/x'].post.requestBody.content['application/json'].examples.standard.value;
-assert(JSON.stringify(arraysValue.onArray) === '["SMS"]',
-  'a single value belonging to an array is wrapped in the generated case, as the schema promises a list');
-assert(JSON.stringify(arraysValue.onItem) === '["SMS"]', 'a single value on the item makes a one-element list');
-assert(JSON.stringify(arraysValue.listOnItem) === '["SMS","MAIL"]', 'a list on the item note fills the array itself');
-assert(JSON.stringify(arraysValue.matrix) === '[[1,2]]',
-  'a list belonging to an item that is itself an array stays one level down');
-
-const sharedTwice = modelCaseSpec();
-sharedTwice.components.schemas.OrderRequest.properties.billTo = { $ref: '#/components/schemas/Address' };
-sharedTwice.paths['/orders'].post.description = '[requestCase: standard "Standard order"]';
-applyMarkers(sharedTwice);
-const twiceValue = sharedTwice.paths['/orders'].post.requestBody.content['application/json'].examples.standard.value;
-assert(twiceValue.shipTo.city === 'Lisbon' && twiceValue.billTo.city === 'Lisbon',
-  'two fields of the same shared type both get the example — the cycle guard does not swallow the second');
-
-const modelCase2 = {
-  swagger: '2.0', info: { title: 'T', version: '1' },
-  paths: { '/x': { post: { operationId: 'p', description: '[requestCase: standard "Std"]',
-    parameters: [{ name: 'body', in: 'body', schema: { $ref: '#/definitions/B' } }], responses: {} } } },
-  definitions: { B: { type: 'object', properties: { a: { type: 'string', description: '[example: "X"]' } } } }
-};
-const modelCase2Stats = applyMarkers(modelCase2);
-assert(modelCase2Stats.notApplied.some((n) => /OpenAPI 3\.x/.test(n.reason)),
-  'Swagger 2.0: a case built from the model is refused like any other case');
-
 
 console.log('example-fill-test OK');

@@ -3,6 +3,43 @@
 This file lists user-visible changes to OpenAPI Converter. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-08-20
+
+### Changed
+
+- **`[responseCase:]` and `[requestCase:]` are now written out of nested
+  parts**, the same `[part: value]` shape the markers themselves have:
+  `[responseCase: [code: 200] [name: confirmed] [summary: Confirmed straight away] [exampleBody: {"orderId": "ORD-1"}]]`.
+  Nothing is quoted any more — a value runs to its closing bracket — and only
+  the marker name has to come first, because every part says for itself what it
+  is. This matters most where the contract is generated from a modelling tool:
+  the whole description lands inside one string in the file, and the quotes the
+  old syntax needed came out escaped and unreadable.
+- The syntax used up to 1.2.0 —
+  `[requestCase: minimal "Required fields only" {...}]` — is no longer applied.
+  Such a marker stays in the description and is listed in the report with the
+  shape a case has today, so nothing changes silently, but existing markers
+  have to be rewritten. Every other marker is untouched.
+- A part given twice in one case, a part the case does not know such as a
+  misspelled `[ordre: 2]`, or text left outside `[…]` is refused and named in
+  the report, rather than one reading quietly winning.
+
+### Added
+
+- `[order: <n>]` inside a case sets where it lands among the others, whatever
+  order the markers were written in. The request body is ordered on its own and
+  so is every response code, so `[responseCase: [code: 200] … [order: 1]]` and
+  `[responseCase: [code: 400] … [order: 1]]` are each the first case of their
+  own code. A case without `[order:]` follows the highest order given so far,
+  which leaves files that use none in the order they already had. `[order:]`
+  stays in the marker and is never written into the contract.
+- `[required]` inside a case builds it from the required fields of the model
+  alone — the smallest body the contract accepts, next to a full case showing
+  everything it can carry. It reaches nested objects and array items, combines
+  with `[schema:]`, and takes its values from the `[example:]` markers already
+  on the fields, so nothing is invented. Giving both `[required]` and
+  `[exampleBody:]` in one case is refused and reported.
+
 ## [1.2.2] - 2026-08-19
 
 ### Fixed

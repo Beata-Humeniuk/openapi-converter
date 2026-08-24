@@ -1066,4 +1066,37 @@ for (const version of ['3.0.4', '3.1.2']) {
     version + ': and the reason is reported');
 }
 
+const unclosed = {
+  swagger: '2.0', info: { title: 'T', version: '1' },
+  paths: { '/orders': { get: {
+    description: 'Reads orders.\r\n[response: 200 "OK" {"id": "1"}',
+    responses: { '200': { description: 'OK' } } } } },
+  definitions: { Offer: { type: 'object', properties: {
+    interests: { type: 'array', items: { type: 'string',
+      description: 'Rate thresholds\r\n[example: ["5.5% up to 100 000"]' } },
+    name: { type: 'string', description: 'Name. [example: "Prime"] [TODO: check with the analyst' }
+  } } }
+};
+const unclosedStats = applyMarkers(unclosed);
+const interests = unclosed.definitions.Offer.properties.interests;
+assert(interests.example === undefined && /\[example: /.test(interests.items.description),
+  'a marker missing its closing bracket is not applied and stays in the description');
+assert(unclosedStats.notApplied.some((n) => n.path === 'Offer.interests[]' && /never closed/.test(n.reason)),
+  'and the field is listed with the reason, instead of the marker going missing without a word');
+assert(unclosedStats.notApplied.some((n) => n.path === 'GET /orders' && /\[response: …\] is never closed/.test(n.reason)),
+  'an operation marker missing its closing bracket is reported too');
+assert(unclosed.definitions.Offer.properties.name.example === 'Prime',
+  'a closed marker beside an unclosed one still applies');
+assert(!unclosedStats.notApplied.some((n) => /TODO/.test(n.reason)),
+  'and an unclosed note that is not a marker is left alone, as an unsupported marker is');
+
+const unclosedTwice = {
+  swagger: '2.0', info: { title: 'T', version: '1' }, paths: {},
+  definitions: { P: { type: 'object', properties: {
+    a: { type: 'string', description: 'A. [example: "x" [example: "y"' }
+  } } }
+};
+assert(applyMarkers(unclosedTwice).notApplied.filter((n) => /never closed/.test(n.reason)).length === 1,
+  'one field says it once, however many times the same marker is left open');
+
 console.log('example-fill-test OK');

@@ -1,7 +1,8 @@
 const { refName } = require('./schemaShared');
 
-function scanTags(text) {
+function scanMarkers(text) {
   const out = [];
+  const unclosed = [];
   const re = /\[\s*([A-Za-z][A-Za-z0-9-]*)\s*(:|\])/g;
   let m;
   while ((m = re.exec(text))) {
@@ -13,11 +14,19 @@ function scanTags(text) {
 
     let i = valueEnd(text, from, true);
     if (i < 0) i = valueEnd(text, from, false);
-    if (i < 0) continue;
+    if (i < 0) { unclosed.push({ key: m[1], start: m.index }); continue; }
     out.push({ key: m[1], raw: text.slice(from, i - 1).trim(), start: m.index, end: i });
     re.lastIndex = i;
   }
-  return out;
+  const opened = unclosed.filter((u) => knownMarkerKey(u.key)).map((u) => u.start);
+  if (!opened.length) return { tags: out, unclosed: unclosed };
+
+  const cut = Math.min.apply(null, opened);
+  return { tags: out.filter((t) => t.start < cut), unclosed: unclosed };
+}
+
+function scanTags(text) {
+  return scanMarkers(text).tags;
 }
 
 function valueEnd(text, from, respectQuotes) {
@@ -200,6 +209,30 @@ function matchTagField(key, table, names) {
   if (k.startsWith('x-')) return { name: key, kind: 'json' };
   const kind = table[k];
   return kind ? { name: names[k] || k, kind } : null;
+}
+
+function knownMarkerKey(key) {
+  return Boolean(matchTagField(key, SCHEMA_TAG_FIELDS, SCHEMA_FIELD_NAMES) ||
+    matchTagField(key, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES));
+}
+
+function unclosedMarkerNotes(text) {
+  const s = String(text || '');
+  if (s.indexOf('[') < 0) return [];
+  const notes = [];
+  for (const open of scanMarkers(s).unclosed) {
+    if (!knownMarkerKey(open.key)) continue;
+    const note = 'the marker [' + open.key + ': …] is never closed — add the ] that ends it';
+    if (notes.indexOf(note) < 0) notes.push(note);
+  }
+  return notes;
+}
+
+function noteUnclosedMarkers(stats, path, text) {
+  for (const reason of unclosedMarkerNotes(text)) {
+    if (stats.notApplied.some((n) => n.path === path && n.reason === reason)) continue;
+    stats.notApplied.push({ path: path, reason: reason });
+  }
 }
 
 function isArraySchema(schema) {
@@ -477,7 +510,7 @@ function parseCaseMarker(raw, withCode) {
 }
 
 module.exports = {
-  scanTags, tidyDescription,
+  scanTags, tidyDescription, noteUnclosedMarkers,
   SCHEMA_TAG_FIELDS, SCHEMA_FIELD_NAMES, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES,
   matchTagField, isArraySchema, fieldFitsNode,
   coerceValue, coerceTagValue, resolveScalarType,

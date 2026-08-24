@@ -520,4 +520,23 @@ assert(JSON.stringify(pluralCase.value) === '{"customerId":"C-1","couponCode":"X
   'a case built from the model reads the 3.1 examples list the same way it reads a marker');
 assert(pluralStats.notApplied.length === 0, 'and reports nothing left over');
 
+const unclosedCase = {
+  openapi: '3.0.3', info: { title: 'T', version: '1' },
+  paths: { '/orders': { post: { operationId: 'createOrder',
+    summary: 'Creates an order.',
+    description: 'Creates.\r\n[responseCase: [code: 200] [name: ok] [summary: Confirmed] [exampleBody: {"x": 1}]',
+    responses: { '200': { description: 'OK',
+      content: { 'application/json': { schema: { type: 'object', properties: { x: { type: 'integer' } } } } } } } } } }
+};
+const unclosedCaseStats = applyMarkers(unclosedCase);
+const unclosedOp = unclosedCase.paths['/orders'].post;
+assert(unclosedOp.summary === 'Creates an order.',
+  'a [summary] part inside an unclosed case marker does not become the summary of the operation');
+assert(unclosedOp.responses['200'].content['application/json'].examples === undefined,
+  'and the case itself is not written');
+assert(/\[responseCase: /.test(unclosedOp.description),
+  'the broken marker stays in the description, whole');
+assert(unclosedCaseStats.notApplied.some((n) => /\[responseCase: …\] is never closed/.test(n.reason)),
+  'and it is reported with the reason');
+
 console.log('case-markers-test OK');

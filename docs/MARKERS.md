@@ -495,6 +495,16 @@ Structural fields such as `type`, `required`, `properties`, `$ref`, and
 `security` cannot be set with markers. Other markers, such as `[TODO: ...]` or
 `[0..1]`, also remain in the description.
 
+A marker whose value is left open — `[example: ["5.5%"]` with the final `]`
+missing — cannot be read: where the value ends is unknown. It is not applied,
+and neither is anything written after it in the same description, because that
+text is still inside the unfinished marker. The description keeps every
+character, and the field is listed after the command finishes with the reason
+`the marker [example: …] is never closed`. This matters most for a marker
+written out of parts, such as `[responseCase: [code: 200] [name: ok] …`, where
+a part like `[summary:]` would otherwise be read on its own and land on the
+operation.
+
 The command does not create values for fields without markers. Running it more
 than once produces the same result.
 

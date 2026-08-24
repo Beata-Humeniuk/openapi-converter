@@ -92,8 +92,9 @@ the parts it gives.
 Unsupported markers, such as `[TODO: ...]`, remain unchanged. Invalid values
 are not applied — the marker stays visible in the description, and the
 extension lists what it could not apply, which example keys are missing from
-the model, and which examples contradict their pattern. Running the command
-again does not change an already processed file.
+the model, and which examples contradict their pattern. A marker left open,
+with its closing `]` missing, is listed the same way instead of quietly doing
+nothing. Running the command again does not change an already processed file.
 
 **OpenAPI: Convert Version** applies the markers to the converted file, so each
 marker is judged by the version you convert to. Converting a Swagger 2.0 file

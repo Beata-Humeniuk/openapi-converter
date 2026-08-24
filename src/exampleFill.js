@@ -2,7 +2,7 @@ const { walkSpec, walkOperations } = require('./specWalk');
 const {
   scanTags, SCHEMA_TAG_FIELDS, SCHEMA_FIELD_NAMES,
   matchTagField, isArraySchema, fieldFitsNode,
-  coerceValue, resolveScalarType, coerceTagValue
+  coerceValue, resolveScalarType, coerceTagValue, noteUnclosedMarkers
 } = require('./markerScanner');
 const {
   schemaHost, jsonList, wrapRefForSiblings, objectTarget, itemsTarget,
@@ -198,6 +198,7 @@ function applyFieldTags(node, ctx, isSwagger2Param, arrayOf, path, owner) {
     }
     else if (name === 'default') ctx.stats.defaultsAdded += 1;
   }
+  noteUnclosedMarkers(ctx.stats, path, text);
   stripTagSpans(textHost, text, applied);
 }
 

@@ -1,6 +1,6 @@
 const {
   scanTags, matchTagField, OPERATION_TAG_FIELDS, OPERATION_FIELD_NAMES,
-  coerceTagValue, parseResponseMarker, parseCaseMarker, responseReason
+  coerceTagValue, parseResponseMarker, parseCaseMarker, responseReason, noteUnclosedMarkers
 } = require('./markerScanner');
 const { objectTarget, itemsTarget, modelExample, stripTagSpans } = require('./modelValues');
 
@@ -251,6 +251,7 @@ function applyOperationTagsIn(op, key, isSwagger2, stats, rootProduces, label, h
     }
     applied.push(tag);
   }
+  noteUnclosedMarkers(stats, label || 'operation', text);
   stripTagSpans(op, text, applied, key);
 
   if (assignedHere.length) op[key] = assignedHere[0];

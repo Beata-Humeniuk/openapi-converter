@@ -111,6 +111,10 @@ async function applyMarkersCommand(uri) {
   }
   const stats = applyMarkers(spec);
   if (!stats.examplesAdded && !stats.tagFields && !stats.mediaSet) {
+    if (stats.notApplied.length) {
+      await showMarkerNotes(versionTag() + 'No markers applied — file unchanged.', stats);
+      return;
+    }
     vscode.window.showInformationMessage(versionTag() + (stats.mismatched.length
       ? 'No changes — the example does not match the pattern in: ' + stats.mismatched.join(', ') + '.'
       : 'No markers to apply — file unchanged.'));
@@ -127,39 +131,42 @@ async function applyMarkersCommand(uri) {
   }
   const message = versionTag() + parts.join(', ') + '. Save the file (Ctrl+S) to keep the changes.';
   if (stats.mismatched.length || stats.unknownKeys.length || stats.notApplied.length) {
-    const notes = [];
-    if (stats.mismatched.length) notes.push(stats.mismatched.length + ' fields: example does not match the pattern.');
-    if (stats.unknownKeys.length) notes.push(stats.unknownKeys.length + ' example keys not found in the model.');
-    if (stats.notApplied.length) notes.push(stats.notApplied.length + ' markers not applied.');
-    const pick = await vscode.window.showWarningMessage(message + ' ' + notes.join(' '), 'Show fields');
-    if (pick === 'Show fields') {
-      const sections = [];
-      if (stats.mismatched.length) {
-        sections.push('# Example does not match the pattern\n\n' +
-          'One of the two is wrong. The most common cause: doubled backslashes\n' +
-          'in an EA note outside quotes — `\\\\d` then means "a backslash, then\n' +
-          'the letter d", not a digit.\n\n' +
-          stats.mismatched.map((s) => '- ' + s).join('\n'));
-      }
-      if (stats.unknownKeys.length) {
-        sections.push('# Example keys not found in the model\n\n' +
-          'They were not inserted — usually a typo in the field name,\n' +
-          'or a field the model does not know.\n\n' +
-          stats.unknownKeys.map((s) => '- ' + s).join('\n'));
-      }
-      if (stats.notApplied.length) {
-        sections.push('# Markers not applied\n\n' +
-          stats.notApplied.map((s) => '- ' + s.path + ' — ' + s.reason).join('\n'));
-      }
-      const listDoc = await vscode.workspace.openTextDocument({
-        language: 'markdown',
-        content: sections.join('\n\n') + '\n'
-      });
-      await vscode.window.showTextDocument(listDoc, { preview: false, viewColumn: vscode.ViewColumn.Beside });
-    }
+    await showMarkerNotes(message, stats);
   } else {
     vscode.window.showInformationMessage(message);
   }
+}
+
+async function showMarkerNotes(message, stats) {
+  const notes = [];
+  if (stats.mismatched.length) notes.push(stats.mismatched.length + ' fields: example does not match the pattern.');
+  if (stats.unknownKeys.length) notes.push(stats.unknownKeys.length + ' example keys not found in the model.');
+  if (stats.notApplied.length) notes.push(stats.notApplied.length + ' markers not applied.');
+  const pick = await vscode.window.showWarningMessage(message + ' ' + notes.join(' '), 'Show fields');
+  if (pick !== 'Show fields') return;
+  const sections = [];
+  if (stats.mismatched.length) {
+    sections.push('# Example does not match the pattern\n\n' +
+      'One of the two is wrong. The most common cause: doubled backslashes\n' +
+      'in an EA note outside quotes — `\\\\d` then means "a backslash, then\n' +
+      'the letter d", not a digit.\n\n' +
+      stats.mismatched.map((s) => '- ' + s).join('\n'));
+  }
+  if (stats.unknownKeys.length) {
+    sections.push('# Example keys not found in the model\n\n' +
+      'They were not inserted — usually a typo in the field name,\n' +
+      'or a field the model does not know.\n\n' +
+      stats.unknownKeys.map((s) => '- ' + s).join('\n'));
+  }
+  if (stats.notApplied.length) {
+    sections.push('# Markers not applied\n\n' +
+      stats.notApplied.map((s) => '- ' + s.path + ' — ' + s.reason).join('\n'));
+  }
+  const listDoc = await vscode.workspace.openTextDocument({
+    language: 'markdown',
+    content: sections.join('\n\n') + '\n'
+  });
+  await vscode.window.showTextDocument(listDoc, { preview: false, viewColumn: vscode.ViewColumn.Beside });
 }
 
 async function applySpecToSource(source, spec) {
@@ -265,7 +272,10 @@ async function convertCommand(uri) {
   const kept = tagStats.notApplied.length;
   const summary = ['Converted ' + fromLabel + ' → ' + targetPick.label + '.'];
   if (lifted) summary.push('Moved ' + lifted + ' marker values into OpenAPI fields.');
-  if (kept) summary.push(kept + ' markers stayed in the descriptions — ' + targetPick.label + ' does not support them.');
+  if (kept) {
+    summary.push(kept + ' markers stayed in the descriptions — ' + targetPick.label +
+      ' does not support them, or their value could not be read.');
+  }
   await offerSaveBeside(source, content, isYaml, summary.join(' '));
 }
 

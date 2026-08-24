@@ -3,6 +3,24 @@
 This file lists user-visible changes to OpenAPI Converter. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-08-24
+
+### Fixed
+
+- **A marker missing its closing `]` is reported instead of doing nothing.** A
+  description such as `Rate thresholds [example: ["5,5% up to 100 000"]` — one
+  bracket short — left the extension with no way to tell where the value ended,
+  so the marker was skipped without a word and the field simply stayed as it
+  was. The field is now listed after the command finishes, with the reason
+  `the marker [example: …] is never closed`, and the report is shown even when
+  the file has nothing else to apply.
+- **Parts of an unclosed marker no longer act on their own.** In
+  `[responseCase: [code: 200] [name: ok] [summary: Confirmed] [exampleBody: {…}]`
+  with the final bracket missing, the `[summary:]` inside the broken marker was
+  read as an operation marker and overwrote the summary of the operation. Text
+  after an unfinished marker is part of that marker, and is left in the
+  description untouched.
+
 ## [1.4.0] - 2026-08-20
 
 ### Changed
